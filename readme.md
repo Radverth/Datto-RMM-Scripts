@@ -39,6 +39,127 @@ This repo is a small collection of PowerShell scripts written to automate common
 - Because the command accepts plaintext passwords, supply the value through secure pipelines or vaults whenever possible.
 - The command emits an error and exits with code 2 or 3 when the user is part of privileged groups, keeping your admin role intact.
 
+### Update printer driver
+
+`scripts/Update-PrinterDriver.ps1` downloads a printer driver package, stages it into the Windows
+driver store, and rebinds every local print queue that is still on the old driver — without
+recreating the queues. Built to be pushed fleet-wide from Datto RMM, where most devices have the
+printer and some do not.
+
+#### Purpose & behavior
+- Reads **all** of its inputs from environment variables (Datto RMM component variables). It takes
+  no CLI parameters, so one component definition covers every client and site.
+- Finds queues by driver-name substring (`DriverMatchString`), not by queue name, because queue
+  names vary per client. Matching is case-insensitive.
+- Checks for matching queues **before** downloading anything, so devices without the printer skip
+  the transfer entirely instead of pulling a driver package they will never use.
+- Downloads the package, verifies it is non-empty, logs its size and SHA256 (and compares it to
+  `ExpectedSha256` when set), then extracts a `.zip`, runs a vendor `.exe`/`.msi` with `SilentArgs`,
+  or uses a bare `.inf` directly.
+- Picks the INF automatically — preferring one whose contents name `DriverName` — or uses `InfPath`
+  when the package ships several. Stages it with `pnputil /add-driver /install` and registers it
+  with `Add-PrinterDriver`.
+- Rebinds each matching queue with `Set-Printer -DriverName`, then re-queries `Get-Printer` and
+  logs pass/fail per queue.
+- Cleans up the temp working folder and exits with a code Datto RMM can alert on.
+
+#### Environment variables
+
+| Variable | Description | Required |
+|---|---|---|
+| `DriverDownloadUrl` | Direct HTTPS link to the driver package (`.zip`, `.exe`, `.msi` or `.inf`). | Yes |
+| `DriverMatchString` | Substring matched against the driver name of existing queues, e.g. `Brother HL-L2350`. | Yes |
+| `DriverName` | Exact driver name to bind queues to, as published by the new driver's INF, e.g. `Brother HL-L2350D series`. | Yes |
+| `InfPath` | Path to the `.inf` inside the extracted package, relative to the extraction root. Set this when a package ships multiple INFs. | No |
+| `SilentArgs` | Silent install or extract switches for a vendor `.exe`/`.msi`, e.g. `/S` or `/qn /norestart`. | No |
+| `LogPath` | Log file location. Defaults to `ProgramData\CentraStage\Update-PrinterDriver.log` when the Datto agent folder exists, otherwise `ProgramData`. | No |
+| `ExpectedSha256` | SHA256 of the download. A mismatch aborts before anything is installed. | No |
+| `TreatNoMatchAsError` | `true` to exit non-zero when no queue matches. Defaults to `false` — the fleet-safe setting. | No |
+| `DryRun` | `true` to log every decision without installing the driver or touching a queue. | No |
+| `KeepWorkingFiles` | `true` to leave the temp download/extract folder behind for troubleshooting. | No |
+
+#### Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | All matched queues are on the new driver, or there was nothing to do |
+| 1 | Unexpected error |
+| 2 | Configuration error (missing required variable, not elevated) |
+| 3 | Download failed or failed verification (bad URL, 404, zero bytes, hash mismatch) |
+| 4 | Extract/stage failed (no usable INF, vendor installer failed) |
+| 5 | Driver install failed (`pnputil` / `Add-PrinterDriver`) |
+| 6 | No matching queues found, and `TreatNoMatchAsError` was `true` |
+| 7 | One or more queues failed to rebind |
+| 8 | Rebind reported success but verification did not confirm the new driver |
+
+**A device with no matching printer exits 0 by default.** That is the expected outcome on much of a
+fleet and must not raise an RMM alert.
+
+#### Datto RMM component setup
+
+1. Create a **Script** component, category *Scripts*, target **Windows**, and set the script type to
+   **PowerShell**. Paste in `Update-PrinterDriver.ps1` (or attach it and call it from the command
+   line `powershell.exe -ExecutionPolicy Bypass -File .\Update-PrinterDriver.ps1`).
+2. Add the component variables under **Variables**, matching the names in the table above exactly —
+   the script reads them with `$env:`, so the variable name *is* the contract:
+   - `DriverDownloadUrl` — Value (String), required
+   - `DriverMatchString` — Value (String), required
+   - `DriverName` — Value (String), required
+   - `InfPath`, `SilentArgs`, `LogPath`, `ExpectedSha256` — Value (String), optional
+   - `TreatNoMatchAsError`, `DryRun`, `KeepWorkingFiles` — Boolean (or String `true`/`false`), optional
+3. Components run as SYSTEM, which satisfies the elevation requirement.
+4. Fill the variable values in at the **job** level, so one component can serve several printer
+   models by scheduling a job per model.
+5. Schedule the job against a site or device group. Re-running is safe: queues already on the target
+   driver are logged as current and left alone.
+
+Local test outside Datto RMM:
+
+```powershell
+$env:DriverDownloadUrl = "https://example.vendor.com/hll2350dw-driver.zip"
+$env:DriverMatchString = "Brother HL-L2350"
+$env:DriverName        = "Brother HL-L2350D series"
+$env:DryRun            = "true"   # drop this once the values are confirmed
+
+.\scripts\Update-PrinterDriver.ps1
+```
+
+#### Logging & monitoring
+
+Every step writes one timestamped line to both stdout and the log file, tagged with a stage:
+`INIT`, `DISCOVER`, `DOWNLOAD`, `STAGE`, `INSTALL`, `REBIND`, `VERIFY`, `CLEANUP`, `RESULT`.
+
+```
+2026-02-11T09:14:22.108Z INFO  [DISCOVER] Matched queue 'Front Desk' driver='Brother HL-L2350 Series' type=Local port='USB001'
+2026-02-11T09:14:24.501Z INFO  [DOWNLOAD] Downloaded hll2350dw.zip bytes=24117248 sha256=368DC888...
+2026-02-11T09:14:31.887Z INFO  [REBIND] OK queue 'Front Desk' rebound from 'Brother HL-L2350 Series' to 'Brother HL-L2350D series'
+2026-02-11T09:14:32.004Z INFO  [VERIFY] PASS queue 'Front Desk' reports driver 'Brother HL-L2350D series'
+2026-02-11T09:14:32.011Z INFO  [RESULT] PRINTERDRIVERUPDATE_RESULT STATUS=SUCCESS EXIT=0 MATCHED=1 UPDATED=1 CURRENT=0 SKIPPED=0 FAILED=0 REBOOTREQUIRED=false MESSAGE="Updated 1 queue(s) to 'Brother HL-L2350D series'"
+```
+
+The run ends with a single machine-readable summary line, repeated inside Datto's
+`<-Start Result->` / `<-End Result->` markers so a monitor can key off it directly. Useful greps:
+
+- `PRINTERDRIVERUPDATE_RESULT` — the one-line outcome of a run
+- `STATUS=SUCCESS` / `STATUS=NOTHINGTODO` / `STATUS=ALREADYCURRENT` — non-alerting outcomes
+- `[REBIND] FAIL` — the specific queues that could not be rebound
+- `[VERIFY] FAIL` — queues that accepted the rebind but did not report the new driver
+
+The log is capped at 5 MB and rolled to `<LogPath>.1`.
+
+#### Notes / limitations
+- `DriverName` must match what the new INF publishes, character for character. If it does not, the
+  script fails at `INSTALL` with exit 5 rather than leaving queues half-migrated. Confirm it on a
+  test device with `Get-PrinterDriver | Select-Object Name`.
+- Queues that are **connections to a print server** are logged and skipped, not failed — their
+  driver is controlled by the server, so the endpoint cannot rebind them. They appear as `SKIPPED`
+  in the result line.
+- A vendor `.exe` needs `SilentArgs`. The script will try to expand an `.exe` as a zip-based
+  self-extractor when `SilentArgs` is empty, but will fail cleanly if it is not one.
+- `pnputil` exit 3010 and installer exit 3010 are treated as success; the result line reports
+  `REBOOTREQUIRED=true` so a job can follow up with a reboot.
+- Devices with no print subsystem (`Get-Printer` unavailable) exit 0 as "nothing to do".
+
 ## What it does
 
 - Looks up an Entra device by `displayName` (`-DeviceName`)
