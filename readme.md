@@ -50,7 +50,11 @@ printer and some do not.
 - Reads **all** of its inputs from environment variables (Datto RMM component variables). It takes
   no CLI parameters, so one component definition covers every client and site.
 - Finds queues by driver-name substring (`DriverMatchString`), not by queue name, because queue
-  names vary per client. Matching is case-insensitive.
+  names vary per client. Matching is case-insensitive. `PrinterNameMatch` / `PrinterNameExclude`
+  narrow that set by queue name when several printers share one generic driver.
+- Handles two different jobs: **rebinding** queues from an old driver to a differently named new
+  one, and **updating a driver in place** when the new package carries the same driver name (the
+  usual case for a shared generic PCL driver). It picks the right one automatically.
 - Checks for matching queues **before** downloading anything, so devices without the printer skip
   the transfer entirely instead of pulling a driver package they will never use.
 - Downloads the package, verifies it is non-empty, logs its size and SHA256 (and compares it to
@@ -70,6 +74,10 @@ printer and some do not.
 | `DriverDownloadUrl` | Direct HTTPS link to the driver package (`.zip`, `.exe`, `.msi` or `.inf`). | Yes |
 | `DriverMatchString` | Substring matched against the driver name of existing queues, e.g. `Brother HL-L2350`. | Yes |
 | `DriverName` | Exact driver name to bind queues to, as published by the new driver's INF, e.g. `Brother HL-L2350D series`. | Yes |
+| `PrinterNameMatch` | Comma/semicolon-separated queue names to limit the run to, e.g. `Reception MFP,Warehouse*`. A pattern containing `*` or `?` is a wildcard; anything else matches as a substring. | No |
+| `PrinterNameExclude` | Same format; matching queues are left alone. Applied after `PrinterNameMatch`. | No |
+| `MinimumDriverVersion` | Version floor for an in-place update, e.g. `61.235.1.0`. At or above it, the run exits 0 without downloading; below it after an update, exit 8. | No |
+| `RestartSpooler` | `true` to restart the Print Spooler after an in-place version update so queues stop using the previously loaded driver binaries. | No |
 | `InfPath` | Path to the `.inf` inside the extracted package, relative to the extraction root. Set this when a package ships multiple INFs. | No |
 | `SilentArgs` | Silent install or extract switches for a vendor `.exe`/`.msi`, e.g. `/S` or `/qn /norestart`. | No |
 | `LogPath` | Log file location. Defaults to `ProgramData\CentraStage\Update-PrinterDriver.log` when the Datto agent folder exists, otherwise `ProgramData`. | No |
@@ -95,6 +103,42 @@ printer and some do not.
 **A device with no matching printer exits 0 by default.** That is the expected outcome on much of a
 fleet and must not raise an RMM alert.
 
+#### Two update modes
+
+The script decides which mode applies by comparing `DriverName` with what the matched queues
+already report.
+
+**Rebind** — the new driver has a *different* name (`Brother HL-L2350 Series` → `Brother HL-L2350D
+series`). Each matched queue is moved to the new driver with `Set-Printer`, and verification
+confirms the queue reports the new name.
+
+**In-place version update** — the new package carries the *same* driver name, which is what
+happens when a shared generic driver such as `HP Universal Printing PCL 6` gets a newer build.
+There is nothing to rebind, so the script stages the package with `pnputil` and re-registers the
+driver from the staged INF, then verifies by comparing the driver version before and after:
+
+```
+2026-02-11T09:14:20.101Z INFO  [DISCOVER] Driver 'HP Universal Printing PCL 6' is currently installed at version 61.230.1.0.
+2026-02-11T09:14:20.104Z INFO  [DISCOVER] 3 matched queue(s) already use 'HP Universal Printing PCL 6'; treating this run as an in-place driver version update.
+2026-02-11T09:14:31.581Z INFO  [VERIFY] PASS driver 'HP Universal Printing PCL 6' version went from 61.230.1.0 to 61.235.1.0
+```
+
+Two things to know about this mode:
+
+- **A name filter cannot scope it.** Windows keeps one copy of a driver per name, so updating it
+  reaches *every* queue bound to that driver — including queues excluded by `PrinterNameExclude`.
+  The script logs a `WARN` when a filter is set on a run that does an in-place update.
+  `PrinterNameMatch` / `PrinterNameExclude` genuinely scope the **rebind** mode only.
+- **Set `MinimumDriverVersion` on recurring jobs.** The installed version is knowable up front but
+  the package version is not, so without a floor every scheduled run downloads the package to find
+  out. With the floor set, an up-to-date device exits 0 as `ALREADYCURRENT` before downloading.
+
+If the driver is already at the package's version, the run reports `STATUS=VERSIONUNCHANGED` and
+exits 0 — non-alerting, but distinct enough that a monitor can single it out.
+
+Queues may keep using the previously loaded driver binaries until the spooler recycles. Set
+`RestartSpooler=true` if the fix needs to take effect without waiting for a reboot.
+
 #### Datto RMM component setup
 
 1. Create a **Script** component, category *Scripts*, target **Windows**, and set the script type to
@@ -106,7 +150,8 @@ fleet and must not raise an RMM alert.
    - `DriverMatchString` — Value (String), required
    - `DriverName` — Value (String), required
    - `InfPath`, `SilentArgs`, `LogPath`, `ExpectedSha256` — Value (String), optional
-   - `TreatNoMatchAsError`, `DryRun`, `KeepWorkingFiles` — Boolean (or String `true`/`false`), optional
+   - `PrinterNameMatch`, `PrinterNameExclude`, `MinimumDriverVersion` — Value (String), optional
+   - `TreatNoMatchAsError`, `DryRun`, `KeepWorkingFiles`, `RestartSpooler` — Boolean (or String `true`/`false`), optional
 3. Components run as SYSTEM, which satisfies the elevation requirement.
 4. Fill the variable values in at the **job** level, so one component can serve several printer
    models by scheduling a job per model.
@@ -140,8 +185,11 @@ Every step writes one timestamped line to both stdout and the log file, tagged w
 The run ends with a single machine-readable summary line, repeated inside Datto's
 `<-Start Result->` / `<-End Result->` markers so a monitor can key off it directly. Useful greps:
 
-- `PRINTERDRIVERUPDATE_RESULT` — the one-line outcome of a run
-- `STATUS=SUCCESS` / `STATUS=NOTHINGTODO` / `STATUS=ALREADYCURRENT` — non-alerting outcomes
+- `PRINTERDRIVERUPDATE_RESULT` — the one-line outcome of a run, carrying `MATCHED`, `UPDATED`,
+  `CURRENT`, `SKIPPED`, `FILTERED`, `FAILED`, `DRIVERVERSION` and `REBOOTREQUIRED`
+- `STATUS=SUCCESS` / `STATUS=NOTHINGTODO` / `STATUS=ALREADYCURRENT` / `STATUS=VERSIONUNCHANGED` —
+  non-alerting outcomes
+- `[DISCOVER] FILTERED` — queues excluded by a printer name filter
 - `[REBIND] FAIL` — the specific queues that could not be rebound
 - `[VERIFY] FAIL` — queues that accepted the rebind but did not report the new driver
 
@@ -159,6 +207,9 @@ The log is capped at 5 MB and rolled to `<LogPath>.1`.
 - `pnputil` exit 3010 and installer exit 3010 are treated as success; the result line reports
   `REBOOTREQUIRED=true` so a job can follow up with a reboot.
 - Devices with no print subsystem (`Get-Printer` unavailable) exit 0 as "nothing to do".
+- The driver version is read from `Get-PrinterDriver` (`DriverVersion`, falling back to
+  `MajorVersion`). If a driver exposes neither, the script logs that it cannot confirm a version
+  change and still exits 0 rather than guessing.
 
 ## What it does
 

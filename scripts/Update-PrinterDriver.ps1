@@ -8,13 +8,17 @@ Built to run as a Datto RMM component. All inputs are read from environment vari
 fleet-wide with no per-device editing.
 
 Flow:
-  1) Find local print queues whose driver name matches DriverMatchString.
+  1) Find local print queues whose driver name matches DriverMatchString, then narrow that set
+     with PrinterNameMatch / PrinterNameExclude if either is set.
      If none match, log "nothing to do" and exit 0 (expected on devices without the printer).
   2) Download the package from DriverDownloadUrl to a temp working folder and verify it.
   3) Extract (.zip), or run the vendor installer (.exe/.msi) with SilentArgs.
   4) Stage the .inf with pnputil and register the driver with Add-PrinterDriver.
-  5) Rebind every matching queue with Set-Printer -DriverName.
-  6) Re-query Get-Printer and confirm each queue reports the new driver.
+  5) Rebind every matching queue with Set-Printer -DriverName. Queues already on DriverName are
+     treated as an in-place version update instead: the staged package is re-registered so the
+     print subsystem picks up the newer build of the same driver.
+  6) Re-query Get-Printer and confirm each queue reports the new driver. For an in-place version
+     update, compare the installed driver version before and after instead.
   7) Remove the temp working folder and emit a greppable result line.
 
 Environment variables (Datto RMM component variables):
@@ -24,6 +28,22 @@ Environment variables (Datto RMM component variables):
                                  e.g. "Brother HL-L2350". Matching is case-insensitive.
   DriverName          (required) Exact driver name to bind queues to, as published by the new
                                  driver's INF, e.g. "Brother HL-L2350D series".
+  PrinterNameMatch    (optional) Comma/semicolon-separated queue names to limit the run to, e.g.
+                                 "Reception MFP,Warehouse*". A pattern with * or ? is a wildcard;
+                                 anything else matches as a substring. Use this when several
+                                 printers share one generic driver and only some should change.
+  PrinterNameExclude  (optional) Same format; queues matching are left alone. Applied after
+                                 PrinterNameMatch. With neither set, every queue on the matched
+                                 driver is updated.
+                                 NOTE: filters decide which queues are REBOUND to a different
+                                 driver. They cannot scope an in-place version update, because
+                                 Windows keeps one copy of a driver per name - every queue using
+                                 that driver gets the new version.
+  MinimumDriverVersion (optional) Version floor for an in-place update, e.g. "61.235.1.0". If the
+                                 driver is already at or above it, the run exits 0 without
+                                 downloading. After an update, a lower version fails with exit 8.
+  RestartSpooler      (optional) "true" to restart the Print Spooler after an in-place version
+                                 update so queues stop using the previously loaded binaries.
   InfPath             (optional) Path to the .inf inside the extracted package, relative to the
                                  extraction root. Set this when auto-discovery picks the wrong INF.
   SilentArgs          (optional) Arguments for a vendor .exe/.msi package, e.g. "/S" or "/quiet".
@@ -57,8 +77,9 @@ $env:DriverName        = "Brother HL-L2350D series"
 .\scripts\Update-PrinterDriver.ps1
 
 .NOTES
-Runs elevated (Datto RMM SYSTEM context). Re-running is safe: queues already on the target
-driver are logged as current and left alone.
+Runs elevated (Datto RMM SYSTEM context). Re-running is safe: a rebind of a queue already on the
+target driver is a no-op, and an in-place version update that finds nothing newer reports
+VERSIONUNCHANGED and still exits 0.
 #>
 
 [CmdletBinding()]
@@ -205,6 +226,84 @@ function Get-MatchingPrinter {
   return @($printers | Where-Object {
     $_.DriverName -like $pattern -or $_.DriverName -eq $TargetDriverName
   })
+}
+
+function Split-PatternList {
+  <# Component variables carry lists as comma- or semicolon-separated text. #>
+  param([Parameter()][string] $Value)
+
+  if (-not $Value) { return @() }
+  return @($Value -split "[;,]" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+}
+
+function Test-NameMatchesAny {
+  <#
+    A pattern containing * or ? is used as a wildcard; anything else is treated as a
+    substring, so "Reception" matches "Reception MFP" without the caller adding stars.
+  #>
+  param(
+    [Parameter(Mandatory = $true)][string] $Name,
+    [Parameter()][string[]] $Patterns
+  )
+
+  foreach ($pattern in $Patterns) {
+    $effective = $pattern
+    if ($effective -notmatch "[\*\?]") { $effective = "*$effective*" }
+    if ($Name -like $effective) { return $true }
+  }
+  return $false
+}
+
+function Get-InstalledDriverVersion {
+  <#
+    Version of a driver as the print subsystem currently sees it. Used to tell an in-place
+    version bump apart from a no-op, since the driver name does not change in that case.
+    Returns $null when the driver is absent or exposes no usable version.
+  #>
+  param([Parameter(Mandatory = $true)][string] $DriverName)
+
+  try {
+    $driver = Get-PrinterDriver -Name $DriverName -ErrorAction Stop | Select-Object -First 1
+    if (-not $driver) { return $null }
+
+    foreach ($property in @("DriverVersion", "MajorVersion")) {
+      $value = $null
+      try { $value = $driver.$property } catch { }
+      if ($value) { return [string]$value }
+    }
+  } catch { }
+
+  return $null
+}
+
+function Compare-DriverVersion {
+  <#
+    Returns -1/0/1 like CompareTo, or $null when the two values cannot be compared.
+    Driver versions come back either dotted (10.0.19041.1) or as a packed integer, so
+    try both rather than guessing.
+  #>
+  param(
+    [Parameter()][string] $Left,
+    [Parameter()][string] $Right
+  )
+
+  if (-not $Left -or -not $Right) { return $null }
+
+  try { return ([version]$Left).CompareTo([version]$Right) } catch { }
+  try { return ([uint64]$Left).CompareTo([uint64]$Right) } catch { }
+  return $null
+}
+
+function Restart-PrintSpooler {
+  <# Queues keep using the loaded driver binaries until the spooler recycles. #>
+  try {
+    Restart-Service -Name "Spooler" -Force -ErrorAction Stop
+    Write-Log -Level INFO -Stage INSTALL -Message "Restarted the Print Spooler service."
+    return $true
+  } catch {
+    Write-Log -Level WARN -Stage INSTALL -Message "Could not restart the Print Spooler service: $($_.Exception.Message)"
+    return $false
+  }
 }
 
 function Get-PackageFileName {
@@ -421,12 +520,33 @@ function Register-PrintDriver {
   param(
     [Parameter(Mandatory = $true)][string] $DriverName,
     [Parameter()][string] $PublishedInfName,
-    [Parameter()][string] $InfFullPath
+    [Parameter()][string] $InfFullPath,
+    [Parameter()][switch] $Force
   )
 
   $existing = Get-PrinterDriver -Name $DriverName -ErrorAction SilentlyContinue
-  if ($existing) {
+  if ($existing -and -not $Force) {
     Write-Log -Level INFO -Stage INSTALL -Message "Printer driver '$DriverName' is already registered."
+    return $true
+  }
+
+  if ($existing -and $Force) {
+    # Same driver name, newer build: re-add from the freshly staged INF so the print
+    # subsystem picks up the new version instead of keeping the loaded one.
+    Write-Log -Level INFO -Stage INSTALL -Message "Printer driver '$DriverName' is registered; re-adding it from the staged package to apply the new version."
+    foreach ($candidate in @((Join-Path $env:SystemRoot "INF\$PublishedInfName"), $InfFullPath)) {
+      if (-not $candidate -or -not (Test-Path -LiteralPath $candidate)) { continue }
+      try {
+        Add-PrinterDriver -Name $DriverName -InfPath $candidate -ErrorAction Stop
+        Write-Log -Level INFO -Stage INSTALL -Message "Re-registered printer driver '$DriverName' from $candidate"
+        return $true
+      } catch {
+        Write-Log -Level WARN -Stage INSTALL -Message "Re-registering '$DriverName' from '$candidate' failed: $($_.Exception.Message)"
+      }
+    }
+
+    # The store already holds the new package; the queues keep working on the old build.
+    Write-Log -Level WARN -Stage INSTALL -Message "Could not re-register '$DriverName'. The new package is staged in the driver store but the print subsystem may still be using the previous build."
     return $true
   }
 
@@ -484,10 +604,15 @@ function Write-Result {
     [Parameter()][int] $Updated = 0,
     [Parameter()][int] $AlreadyCurrent = 0,
     [Parameter()][int] $Skipped = 0,
-    [Parameter()][int] $Failed = 0
+    [Parameter()][int] $Failed = 0,
+    [Parameter()][int] $Filtered = 0,
+    [Parameter()][string] $DriverVersion
   )
 
-  $summary = "PRINTERDRIVERUPDATE_RESULT STATUS=$Status EXIT=$ExitCode MATCHED=$Matched UPDATED=$Updated CURRENT=$AlreadyCurrent SKIPPED=$Skipped FAILED=$Failed REBOOTREQUIRED=$($script:RebootRequired.ToString().ToLowerInvariant()) MESSAGE=""$Message"""
+  $versionField = $DriverVersion
+  if (-not $versionField) { $versionField = "unknown" }
+
+  $summary = "PRINTERDRIVERUPDATE_RESULT STATUS=$Status EXIT=$ExitCode MATCHED=$Matched UPDATED=$Updated CURRENT=$AlreadyCurrent SKIPPED=$Skipped FILTERED=$Filtered FAILED=$Failed DRIVERVERSION=$versionField REBOOTREQUIRED=$($script:RebootRequired.ToString().ToLowerInvariant()) MESSAGE=""$Message"""
   Write-Log -Level $(if ($ExitCode -eq 0) { "INFO" } else { "ERROR" }) -Stage RESULT -Message $summary
 
   [Console]::Out.WriteLine("<-Start Result->")
@@ -506,16 +631,25 @@ $infPath             = Get-EnvValue -Name "InfPath"
 $silentArgs          = Get-EnvValue -Name "SilentArgs"
 $expectedSha256      = Get-EnvValue -Name "ExpectedSha256"
 $logPath             = Get-EnvValue -Name "LogPath"
+$printerNameMatch    = Get-EnvValue -Name "PrinterNameMatch"
+$printerNameExclude  = Get-EnvValue -Name "PrinterNameExclude"
+$minimumDriverVersion = Get-EnvValue -Name "MinimumDriverVersion"
 $treatNoMatchAsError = Get-EnvBool  -Name "TreatNoMatchAsError" -Default $false
+$restartSpooler      = Get-EnvBool  -Name "RestartSpooler" -Default $false
 $dryRun              = Get-EnvBool  -Name "DryRun" -Default $false
 $keepWorkingFiles    = Get-EnvBool  -Name "KeepWorkingFiles" -Default $false
 
-$matchedCount   = 0
-$updatedCount   = 0
-$currentCount   = 0
-$skippedCount   = 0
-$failedCount    = 0
-$exitCode       = $script:ExitOk
+$matchedCount    = 0
+$filteredCount   = 0
+$updatedCount    = 0
+$currentCount    = 0
+$skippedCount    = 0
+$failedCount     = 0
+$isVersionUpdate = $false
+$versionChanged  = $false
+$versionBefore   = $null
+$versionAfter    = $null
+$exitCode        = $script:ExitOk
 
 try {
   Initialize-Log -Path (Resolve-LogPath -ExplicitPath $logPath)
@@ -538,6 +672,9 @@ try {
   }
 
   Write-Log -Level INFO -Stage INIT -Message "DriverMatchString='$driverMatchString' DriverName='$driverName' TreatNoMatchAsError=$treatNoMatchAsError"
+  if ($printerNameMatch)     { Write-Log -Level INFO -Stage INIT -Message "PrinterNameMatch='$printerNameMatch'" }
+  if ($printerNameExclude)   { Write-Log -Level INFO -Stage INIT -Message "PrinterNameExclude='$printerNameExclude'" }
+  if ($minimumDriverVersion) { Write-Log -Level INFO -Stage INIT -Message "MinimumDriverVersion='$minimumDriverVersion'" }
 
   if (-not (Test-IsAdministrator)) {
     $exitCode = $script:ExitConfig
@@ -576,17 +713,89 @@ try {
     Write-Log -Level INFO -Stage DISCOVER -Message "Matched queue '$($printer.Name)' driver='$($printer.DriverName)' type=$($printer.Type) port='$($printer.PortName)'"
   }
 
+  # Narrow by queue name. Both filters are optional: with neither set, every queue on the
+  # matched driver is updated, which is what a shared generic driver usually wants.
+  $includePatterns = @(Split-PatternList -Value $printerNameMatch)
+  $excludePatterns = @(Split-PatternList -Value $printerNameExclude)
+
+  if ($includePatterns.Count -gt 0 -or $excludePatterns.Count -gt 0) {
+    $selected = @()
+    foreach ($printer in $matchedPrinters) {
+      $queueName = "$($printer.Name)"
+
+      if ($includePatterns.Count -gt 0 -and -not (Test-NameMatchesAny -Name $queueName -Patterns $includePatterns)) {
+        $filteredCount++
+        Write-Log -Level INFO -Stage DISCOVER -Message "FILTERED queue '$queueName' does not match PrinterNameMatch."
+        continue
+      }
+      if ($excludePatterns.Count -gt 0 -and (Test-NameMatchesAny -Name $queueName -Patterns $excludePatterns)) {
+        $filteredCount++
+        Write-Log -Level INFO -Stage DISCOVER -Message "FILTERED queue '$queueName' matches PrinterNameExclude."
+        continue
+      }
+      $selected += $printer
+    }
+
+    $matchedPrinters = @($selected)
+    $matchedCount = $matchedPrinters.Count
+    Write-Log -Level INFO -Stage DISCOVER -Message "Printer name filter kept $matchedCount queue(s), filtered out $filteredCount."
+
+    if ($matchedCount -eq 0) {
+      if ($treatNoMatchAsError) {
+        $exitCode = $script:ExitNoMatch
+        Write-Log -Level ERROR -Stage DISCOVER -Message "Printer name filter excluded every matching queue and TreatNoMatchAsError is true."
+        Write-Result -Status "NOMATCH" -ExitCode $exitCode -Message "Printer name filter excluded every matching queue" -Filtered $filteredCount
+        exit $exitCode
+      }
+
+      Write-Log -Level INFO -Stage DISCOVER -Message "Printer name filter excluded every matching queue. Nothing to do."
+      Write-Result -Status "NOTHINGTODO" -ExitCode $script:ExitOk -Message "Printer name filter excluded every matching queue" -Filtered $filteredCount
+      exit $script:ExitOk
+    }
+  }
+
   $needingUpdate = @($matchedPrinters | Where-Object { $_.DriverName -ne $driverName })
   $currentCount = $matchedCount - $needingUpdate.Count
 
-  if ($needingUpdate.Count -eq 0) {
-    # Idempotent re-run: everything is already on the target driver.
-    Write-Log -Level INFO -Stage DISCOVER -Message "All $matchedCount matched queue(s) already use '$driverName'. Nothing to do."
-    Write-Result -Status "ALREADYCURRENT" -ExitCode $script:ExitOk -Message "All matched queues already on target driver" -Matched $matchedCount -AlreadyCurrent $currentCount
+  # Queues already reporting the target name are not necessarily done: pushing a newer build
+  # of the same driver (common with a shared generic PCL driver) never changes the name, so
+  # this is an in-place version update rather than a rebind.
+  $isVersionUpdate = $currentCount -gt 0
+  $versionBefore = Get-InstalledDriverVersion -DriverName $driverName
+  if ($versionBefore) {
+    Write-Log -Level INFO -Stage DISCOVER -Message "Driver '$driverName' is currently installed at version $versionBefore."
+  }
+
+  if ($isVersionUpdate -and $filteredCount -gt 0) {
+    # Windows keeps one copy of a driver per name, so an in-place version update reaches every
+    # queue bound to it. A name filter can only decide what gets REBOUND to a different driver.
+    Write-Log -Level WARN -Stage DISCOVER -Message "$filteredCount queue(s) were excluded by name, but this run updates driver '$driverName' in place. Excluded queues using that same driver will also get the new version - a name filter cannot scope a shared driver."
+  }
+
+  if ($needingUpdate.Count -eq 0 -and -not $isVersionUpdate) {
+    Write-Log -Level INFO -Stage DISCOVER -Message "Nothing to update for '$driverName'."
+    Write-Result -Status "NOTHINGTODO" -ExitCode $script:ExitOk -Message "No queue needs updating" -Matched $matchedCount -AlreadyCurrent $currentCount -Filtered $filteredCount
     exit $script:ExitOk
   }
 
-  Write-Log -Level INFO -Stage DISCOVER -Message "$($needingUpdate.Count) of $matchedCount matched queue(s) need rebinding to '$driverName'."
+  # A version floor lets a scheduled job skip the download once the fleet is up to date.
+  if ($minimumDriverVersion -and $needingUpdate.Count -eq 0 -and $versionBefore) {
+    $comparison = Compare-DriverVersion -Left $versionBefore -Right $minimumDriverVersion
+    if ($null -eq $comparison) {
+      Write-Log -Level WARN -Stage DISCOVER -Message "Cannot compare installed version '$versionBefore' with MinimumDriverVersion '$minimumDriverVersion'; continuing with the update."
+    } elseif ($comparison -ge 0) {
+      Write-Log -Level INFO -Stage DISCOVER -Message "Installed version $versionBefore already meets MinimumDriverVersion $minimumDriverVersion. Nothing to do."
+      Write-Result -Status "ALREADYCURRENT" -ExitCode $script:ExitOk -Message "Driver already at version $versionBefore" -Matched $matchedCount -AlreadyCurrent $currentCount -Filtered $filteredCount
+      exit $script:ExitOk
+    }
+  }
+
+  if ($needingUpdate.Count -gt 0) {
+    Write-Log -Level INFO -Stage DISCOVER -Message "$($needingUpdate.Count) of $matchedCount matched queue(s) need rebinding to '$driverName'."
+  }
+  if ($isVersionUpdate) {
+    Write-Log -Level INFO -Stage DISCOVER -Message "$currentCount matched queue(s) already use '$driverName'; treating this run as an in-place driver version update."
+  }
 
   # --- Step 2: download ----------------------------------------------------
   $script:WorkingRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("PrinterDriverUpdate_" + [Guid]::NewGuid().ToString("N"))
@@ -607,7 +816,7 @@ try {
   } catch {
     $exitCode = $script:ExitDownload
     Write-Log -Level ERROR -Stage DOWNLOAD -Message "Download failed: $($_.Exception.Message)"
-    Write-Result -Status "DOWNLOADFAILED" -ExitCode $exitCode -Message "Download failed from $driverDownloadUrl" -Matched $matchedCount -AlreadyCurrent $currentCount
+    Write-Result -Status "DOWNLOADFAILED" -ExitCode $exitCode -Message "Download failed from $driverDownloadUrl" -Matched $matchedCount -AlreadyCurrent $currentCount -Filtered $filteredCount
     exit $exitCode
   }
 
@@ -617,7 +826,7 @@ try {
   if ($expectedSha256 -and ($hash -ne $expectedSha256.Trim().ToUpperInvariant())) {
     $exitCode = $script:ExitDownload
     Write-Log -Level ERROR -Stage DOWNLOAD -Message "SHA256 mismatch. Expected $($expectedSha256.Trim().ToUpperInvariant()), got $hash."
-    Write-Result -Status "DOWNLOADFAILED" -ExitCode $exitCode -Message "SHA256 mismatch on downloaded package" -Matched $matchedCount -AlreadyCurrent $currentCount
+    Write-Result -Status "DOWNLOADFAILED" -ExitCode $exitCode -Message "SHA256 mismatch on downloaded package" -Matched $matchedCount -AlreadyCurrent $currentCount -Filtered $filteredCount
     exit $exitCode
   }
 
@@ -688,7 +897,7 @@ try {
   } catch {
     $exitCode = $script:ExitStage
     Write-Log -Level ERROR -Stage STAGE -Message "Staging failed: $($_.Exception.Message)"
-    Write-Result -Status "STAGEFAILED" -ExitCode $exitCode -Message "Failed to extract or run the driver package" -Matched $matchedCount -AlreadyCurrent $currentCount
+    Write-Result -Status "STAGEFAILED" -ExitCode $exitCode -Message "Failed to extract or run the driver package" -Matched $matchedCount -AlreadyCurrent $currentCount -Filtered $filteredCount
     exit $exitCode
   }
 
@@ -701,20 +910,24 @@ try {
   } catch {
     $exitCode = $script:ExitStage
     Write-Log -Level ERROR -Stage STAGE -Message "INF discovery failed: $($_.Exception.Message)"
-    Write-Result -Status "STAGEFAILED" -ExitCode $exitCode -Message "Could not determine which INF to install" -Matched $matchedCount -AlreadyCurrent $currentCount
+    Write-Result -Status "STAGEFAILED" -ExitCode $exitCode -Message "Could not determine which INF to install" -Matched $matchedCount -AlreadyCurrent $currentCount -Filtered $filteredCount
     exit $exitCode
   }
 
   if (-not $infFullPath -and -not $installerRan) {
     $exitCode = $script:ExitStage
     Write-Log -Level ERROR -Stage STAGE -Message "No .inf found in the package and no vendor installer was run."
-    Write-Result -Status "STAGEFAILED" -ExitCode $exitCode -Message "No INF found in the driver package" -Matched $matchedCount -AlreadyCurrent $currentCount
+    Write-Result -Status "STAGEFAILED" -ExitCode $exitCode -Message "No INF found in the driver package" -Matched $matchedCount -AlreadyCurrent $currentCount -Filtered $filteredCount
     exit $exitCode
   }
 
   if ($dryRun) {
-    Write-Log -Level WARN -Stage INSTALL -Message "DryRun: would stage '$infFullPath' and rebind $($needingUpdate.Count) queue(s) to '$driverName'."
-    Write-Result -Status "DRYRUN" -ExitCode $script:ExitOk -Message "DryRun completed, no changes made" -Matched $matchedCount -AlreadyCurrent $currentCount -Skipped $needingUpdate.Count
+    $dryRunDetail = "DryRun: would stage '$infFullPath' and rebind $($needingUpdate.Count) queue(s) to '$driverName'."
+    if ($isVersionUpdate) {
+      $dryRunDetail += " $currentCount queue(s) already on '$driverName' would get the new driver version in place (currently $versionBefore)."
+    }
+    Write-Log -Level WARN -Stage INSTALL -Message $dryRunDetail
+    Write-Result -Status "DRYRUN" -ExitCode $script:ExitOk -Message "DryRun completed, no changes made" -Matched $matchedCount -AlreadyCurrent $currentCount -Filtered $filteredCount -Skipped $needingUpdate.Count -DriverVersion $versionBefore
     exit $script:ExitOk
   }
 
@@ -727,13 +940,17 @@ try {
       Write-Log -Level INFO -Stage INSTALL -Message "No INF to stage; relying on the vendor installer to have registered the driver."
     }
 
-    if (-not (Register-PrintDriver -DriverName $driverName -PublishedInfName $publishedInfName -InfFullPath $infFullPath)) {
+    if (-not (Register-PrintDriver -DriverName $driverName -PublishedInfName $publishedInfName -InfFullPath $infFullPath -Force:$isVersionUpdate)) {
       throw "Driver '$driverName' is not available to the print subsystem after install. Confirm DriverName matches the name published by the INF."
+    }
+
+    if ($isVersionUpdate -and $restartSpooler) {
+      [void](Restart-PrintSpooler)
     }
   } catch {
     $exitCode = $script:ExitInstall
     Write-Log -Level ERROR -Stage INSTALL -Message "Driver install failed: $($_.Exception.Message)"
-    Write-Result -Status "INSTALLFAILED" -ExitCode $exitCode -Message "Driver install failed for '$driverName'" -Matched $matchedCount -AlreadyCurrent $currentCount
+    Write-Result -Status "INSTALLFAILED" -ExitCode $exitCode -Message "Driver install failed for '$driverName'" -Matched $matchedCount -AlreadyCurrent $currentCount -Filtered $filteredCount
     exit $exitCode
   }
 
@@ -784,21 +1001,63 @@ try {
 
   $failedCount = $failedQueues.Count + $verifyFailures.Count
 
+  # For an in-place version update the queue name check proves nothing (the driver name never
+  # changed), so compare the installed driver version before and after instead.
+  $versionAfter = Get-InstalledDriverVersion -DriverName $driverName
+  $versionChanged = $false
+  if ($isVersionUpdate) {
+    if ($versionAfter -and $versionBefore -and ($versionAfter -ne $versionBefore)) {
+      $versionChanged = $true
+      Write-Log -Level INFO -Stage VERIFY -Message "PASS driver '$driverName' version went from $versionBefore to $versionAfter"
+    } elseif ($versionAfter -and $versionBefore) {
+      Write-Log -Level WARN -Stage VERIFY -Message "Driver '$driverName' still reports version $versionAfter after the update. It may already have been the newest build, or the spooler is still holding the previous one (set RestartSpooler=true)."
+    } else {
+      Write-Log -Level WARN -Stage VERIFY -Message "Could not read a driver version for '$driverName' before/after the update, so an in-place version change cannot be confirmed."
+    }
+
+    # An explicit version floor turns "did not change" into a real, alertable failure.
+    if ($minimumDriverVersion -and $versionAfter) {
+      $comparison = Compare-DriverVersion -Left $versionAfter -Right $minimumDriverVersion
+      if ($null -eq $comparison) {
+        Write-Log -Level WARN -Stage VERIFY -Message "Cannot compare installed version '$versionAfter' with MinimumDriverVersion '$minimumDriverVersion'."
+      } elseif ($comparison -lt 0) {
+        $exitCode = $script:ExitVerify
+        Write-Log -Level ERROR -Stage VERIFY -Message "FAIL driver '$driverName' is at version $versionAfter, below MinimumDriverVersion $minimumDriverVersion."
+        Write-Result -Status "VERIFYFAILED" -ExitCode $exitCode -Message "Driver version $versionAfter is below MinimumDriverVersion $minimumDriverVersion" -Matched $matchedCount -Updated $updatedCount -AlreadyCurrent $currentCount -Skipped $skippedCount -Filtered $filteredCount -Failed $failedCount -DriverVersion $versionAfter
+        exit $exitCode
+      }
+    }
+  }
+
   if ($failedQueues.Count -gt 0) {
     $exitCode = $script:ExitRebind
     Write-Log -Level ERROR -Stage RESULT -Message "Rebind failed for: $($failedQueues -join ', ')"
-    Write-Result -Status "REBINDFAILED" -ExitCode $exitCode -Message "Failed to rebind: $($failedQueues -join '; ')" -Matched $matchedCount -Updated $updatedCount -AlreadyCurrent $currentCount -Skipped $skippedCount -Failed $failedCount
+    Write-Result -Status "REBINDFAILED" -ExitCode $exitCode -Message "Failed to rebind: $($failedQueues -join '; ')" -Matched $matchedCount -Updated $updatedCount -AlreadyCurrent $currentCount -Skipped $skippedCount -Filtered $filteredCount -Failed $failedCount -DriverVersion $versionAfter
     exit $exitCode
   }
 
   if ($verifyFailures.Count -gt 0) {
     $exitCode = $script:ExitVerify
     Write-Log -Level ERROR -Stage RESULT -Message "Verification failed for: $($verifyFailures -join ', ')"
-    Write-Result -Status "VERIFYFAILED" -ExitCode $exitCode -Message "Verification failed: $($verifyFailures -join '; ')" -Matched $matchedCount -Updated $updatedCount -AlreadyCurrent $currentCount -Skipped $skippedCount -Failed $failedCount
+    Write-Result -Status "VERIFYFAILED" -ExitCode $exitCode -Message "Verification failed: $($verifyFailures -join '; ')" -Matched $matchedCount -Updated $updatedCount -AlreadyCurrent $currentCount -Skipped $skippedCount -Filtered $filteredCount -Failed $failedCount -DriverVersion $versionAfter
     exit $exitCode
   }
 
-  Write-Result -Status "SUCCESS" -ExitCode $script:ExitOk -Message "Updated $updatedCount queue(s) to '$driverName'" -Matched $matchedCount -Updated $updatedCount -AlreadyCurrent $currentCount -Skipped $skippedCount
+  $finalStatus = "SUCCESS"
+  $finalMessage = "Updated $updatedCount queue(s) to '$driverName'"
+  if ($isVersionUpdate) {
+    if ($versionChanged) {
+      $finalMessage = "Driver '$driverName' updated from version $versionBefore to $versionAfter"
+      if ($updatedCount -gt 0) { $finalMessage += "; $updatedCount queue(s) rebound" }
+    } elseif ($updatedCount -eq 0) {
+      # Nothing moved: the package was probably already the installed build. Non-alerting,
+      # but given its own status so a monitor can single it out if it wants to.
+      $finalStatus = "VERSIONUNCHANGED"
+      $finalMessage = "Driver '$driverName' still reports version $versionAfter after staging the package"
+    }
+  }
+
+  Write-Result -Status $finalStatus -ExitCode $script:ExitOk -Message $finalMessage -Matched $matchedCount -Updated $updatedCount -AlreadyCurrent $currentCount -Skipped $skippedCount -Filtered $filteredCount -DriverVersion $versionAfter
   $exitCode = $script:ExitOk
   exit $exitCode
 
@@ -807,11 +1066,11 @@ try {
   if ($message -like "Missing required environment variable*") {
     $exitCode = $script:ExitConfig
     Write-Log -Level ERROR -Stage INIT -Message $message
-    Write-Result -Status "CONFIGERROR" -ExitCode $exitCode -Message $message -Matched $matchedCount -AlreadyCurrent $currentCount
+    Write-Result -Status "CONFIGERROR" -ExitCode $exitCode -Message $message -Matched $matchedCount -AlreadyCurrent $currentCount -Filtered $filteredCount
   } else {
     $exitCode = $script:ExitUnexpected
     Write-Log -Level ERROR -Stage RESULT -Message "Unexpected error: $message"
-    Write-Result -Status "ERROR" -ExitCode $exitCode -Message $message -Matched $matchedCount -Updated $updatedCount -AlreadyCurrent $currentCount -Skipped $skippedCount -Failed $failedCount
+    Write-Result -Status "ERROR" -ExitCode $exitCode -Message $message -Matched $matchedCount -Updated $updatedCount -AlreadyCurrent $currentCount -Skipped $skippedCount -Filtered $filteredCount -Failed $failedCount -DriverVersion $versionAfter
   }
   exit $exitCode
 
