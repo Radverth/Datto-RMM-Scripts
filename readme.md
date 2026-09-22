@@ -211,6 +211,141 @@ The log is capped at 5 MB and rolled to `<LogPath>.1`.
   `MajorVersion`). If a driver exposes neither, the script logs that it cannot confirm a version
   change and still exits 0 rather than guessing.
 
+### Export printer inventory
+
+`scripts/Export-PrinterInventory.ps1` reports the print queues and drivers on a device as
+ready-to-paste `Update-PrinterDriver` component variable values. It is the read-only companion to
+that script — it answers the question you have to answer before you can schedule it: *what exactly
+do I put in `DriverMatchString`, `DriverName` and `MinimumDriverVersion` for the printers this
+fleet actually has?*
+
+Nothing is installed, and no queue, driver or spooler setting is changed.
+
+#### Purpose & behavior
+- Enumerates every local print queue and registered driver, then narrows the set with the **same
+  filters** `Update-PrinterDriver` uses (`DriverMatchString`, `PrinterNameMatch`,
+  `PrinterNameExclude`). The filter logic is duplicated deliberately, so what this script reports
+  is what that script will actually do.
+- Groups queues **by driver**, because one `Update-PrinterDriver` job targets one driver, and
+  emits a `[SUGGEST]` block per driver with the values to paste in.
+- Derives a `DriverMatchString` candidate by dropping the parts of a driver name that change
+  between builds — a trailing version parenthetical and generic trailing words:
+
+  | Driver name | Suggested `DriverMatchString` |
+  |---|---|
+  | `Brother HL-L2350D series` | `Brother HL-L2350D` |
+  | `HP Universal Printing PCL 6 (v7.0.1)` | `HP Universal Printing PCL 6` |
+  | `Microsoft IPP Class Driver` | `Microsoft IPP` |
+  | `Canon Generic Plus UFR II` | `Canon Generic Plus UFR II` (unchanged) |
+
+- **Checks the suggestion before you trust it.** It only ever removes a suffix, so the result
+  always matches its own driver; what matters is whether it matches *too much*. The script counts
+  the other queues the candidate would catch and warns when there are any.
+- Flags the things that silently break an `Update-PrinterDriver` job:
+  - a queue name containing `,` or `;` — `PrinterNameMatch` is split on both, so the name cannot
+    go in verbatim;
+  - a queue name containing `*` or `?` — read as a wildcard, not a literal;
+  - several queues sharing one driver — an in-place version update reaches all of them and a name
+    filter cannot scope it;
+  - queues that are print server connections — `Update-PrinterDriver` skips those.
+- Optionally writes CSV and/or JSON, and a compact driver summary to a Datto RMM user-defined
+  field so devices can be filtered by printer driver in the console.
+
+#### Environment variables
+
+| Variable | Description | Required |
+|---|---|---|
+| `DriverMatchString` | Only report queues whose driver name contains this substring, e.g. `Brother`. Unset reports every queue — the usual first pass on an unknown fleet. | No |
+| `PrinterNameMatch` | Comma/semicolon-separated queue names to limit the report to. Same format and semantics as `Update-PrinterDriver`. | No |
+| `PrinterNameExclude` | Same format; matching queues are left out. Applied after `PrinterNameMatch`. | No |
+| `IncludeConnections` | `false` to leave out print server connections. Defaults to `true` — they are reported and flagged, because `Update-PrinterDriver` skips them and you want to know they exist. | No |
+| `CsvPath` | Write the inventory to this CSV. A path naming an existing directory (or ending in a separator) gets `<COMPUTERNAME>-printers.csv` written inside it. | No |
+| `JsonPath` | Same inventory as JSON (UTF-8, no BOM). Same directory handling. | No |
+| `UdfNumber` | `1`-`30`. Writes a compact driver summary to that Datto RMM user-defined field. Requires elevation. UDFs hold 255 characters; longer summaries are truncated and the run logs that. | No |
+| `LogPath` | Log file location. Defaults to `ProgramData\CentraStage\Export-PrinterInventory.log` when the Datto agent folder exists, otherwise `ProgramData`. | No |
+| `TreatNoMatchAsError` | `true` to exit non-zero when no queue is found. Defaults to `false` — the fleet-safe setting. | No |
+
+#### Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | Inventory produced, or there was nothing to report |
+| 1 | Unexpected error |
+| 2 | Configuration error (bad `UdfNumber`, UDF write requested without elevation) |
+| 3 | Failed to write `CsvPath` / `JsonPath` / the UDF |
+| 6 | No queues found, and `TreatNoMatchAsError` was `true` |
+
+#### About `MinimumDriverVersion`
+
+Windows usually reports a driver version as a **packed 64-bit integer**, not a dotted version.
+`Update-PrinterDriver` compares `MinimumDriverVersion` against whatever `Get-PrinterDriver`
+returns, trying a dotted `[version]` parse first and a `[uint64]` parse second — so the two values
+have to be in the *same* form. Pasting `61.235.1.0` when the driver reports `17170982896730112`
+does not compare; the update script logs that it cannot compare the two and carries on.
+
+So this script suggests the **raw** value and shows the decoded dotted form alongside it for
+reading only:
+
+```
+[SUGGEST]   MinimumDriverVersion = 17170982896730112   (reads as 61.235.1.0; paste the raw value, that is the form the update script compares)
+```
+
+Paste the raw number. A driver that reports no version at all is flagged, and the variable should
+be left unset for it.
+
+#### Example output
+
+```
+[DISCOVER] Queue 'Reception MFP' driver='HP Universal Printing PCL 6' version=17170982896730112 (61.235.1.0) type=Local port='IP_10.0.0.50'
+[SUGGEST] --- Driver 2 of 4: 'HP Universal Printing PCL 6' ---
+[SUGGEST]   DriverMatchString    = HP Universal Printing PCL 6
+[SUGGEST]   DriverName           = HP Universal Printing PCL 6
+[SUGGEST]   MinimumDriverVersion = 17170982896730112   (reads as 61.235.1.0; paste the raw value, that is the form the update script compares)
+[SUGGEST]   PrinterNameMatch     = Reception MFP,Warehouse,Accounts   (omit to target every queue on this driver)
+[SUGGEST]   Queues (3): Reception MFP; Warehouse; Accounts
+[SUGGEST]   DriverMatchString 'HP Universal Printing PCL 6' also matches 1 queue(s) on other driver(s): HP Universal Printing PCL 6 (v7.0.1). Narrow it, or scope the job with PrinterNameMatch.
+[SUGGEST]   3 queues share driver 'HP Universal Printing PCL 6'. A newer build of the same driver updates it in place and reaches every one of them; PrinterNameMatch cannot scope that.
+[SUGGEST]   1 of these are print server connections (Accounts). Update-PrinterDriver skips them - their driver is managed on the server.
+```
+
+The run ends with a single machine-readable summary line inside Datto's `<-Start Result->` /
+`<-End Result->` markers:
+
+```
+PRINTERINVENTORY_RESULT STATUS=SUCCESS EXIT=0 QUEUES=6 DRIVERS=4 CONNECTIONS=1 FILTERED=0 CSV="none" JSON="none" MESSAGE="Reported 6 queue(s) across 4 driver(s)"
+```
+
+Useful greps: `PRINTERINVENTORY_RESULT` for the one-line outcome, `[SUGGEST]` for the paste-ready
+values, and `WARN  [SUGGEST]` for just the things that need a decision.
+
+#### Datto RMM component setup
+
+1. Create a **Script** component the same way as `Update-PrinterDriver`, and add the variables
+   above under **Variables** — all optional, so a component with none set reports everything.
+2. Run it against a site or device group and read the job output per device. Because it changes
+   nothing, it is safe to schedule and safe to re-run.
+3. To collect the fleet into one place, point `CsvPath` at a share ending in a separator
+   (`\\fileserver\rmm$\printers\`). Each device writes its own `<COMPUTERNAME>-printers.csv`, so
+   devices do not overwrite each other and there is no concurrent-append race.
+
+Local test outside Datto RMM:
+
+```powershell
+$env:DriverMatchString = "Brother"   # omit to report every queue
+.\scripts\Export-PrinterInventory.ps1
+```
+
+#### Notes / limitations
+- Read-only, so it does **not** need elevation — unless `UdfNumber` is set, which needs `HKLM`
+  access. It checks for elevation up front in that case and exits 2 rather than failing later.
+- `IsDefaultForCaller` comes from `Win32_Printer` and is **per user profile**. Datto RMM runs
+  components as SYSTEM, so under RMM it reflects SYSTEM's profile, not the signed-in user's.
+  Treat it as meaningful only on a manual, interactive run.
+- The suggested `DriverMatchString` is a starting point, not a guarantee. It is derived from the
+  driver name alone; the collateral-match warning is what tells you whether it is specific enough.
+- Devices with no print subsystem (`Get-Printer` unavailable) exit 0 as "nothing to do", as does a
+  device with no printers — neither should raise an RMM alert.
+
 ## What it does
 
 - Looks up an Entra device by `displayName` (`-DeviceName`)
