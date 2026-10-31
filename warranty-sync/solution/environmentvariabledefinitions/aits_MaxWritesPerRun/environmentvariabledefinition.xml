@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<environmentvariabledefinition schemaname="aits_MaxWritesPerRun"><defaultvalue>1500</defaultvalue><introducedversion>1.0</introducedversion><iscustomizable>1</iscustomizable><isrequired>0</isrequired><displayname default="Max writes per run"><label description="Max writes per run" languagecode="1033" /></displayname><description default="Cap on devices written per night"><label description="Cap on devices written per night" languagecode="1033" /></description><type>100000000</type></environmentvariabledefinition>

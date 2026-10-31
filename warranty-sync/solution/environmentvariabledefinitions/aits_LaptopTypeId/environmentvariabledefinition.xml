@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<environmentvariabledefinition schemaname="aits_LaptopTypeId"><introducedversion>1.0</introducedversion><iscustomizable>1</iscustomizable><isrequired>1</isrequired><displayname default="IT Glue Laptop type ID"><label description="IT Glue Laptop type ID" languagecode="1033" /></displayname><description default="GET /configuration_types"><label description="GET /configuration_types" languagecode="1033" /></description><type>100000000</type></environmentvariabledefinition>

@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<environmentvariabledefinition schemaname="aits_AutotaskUsername"><introducedversion>1.0</introducedversion><iscustomizable>1</iscustomizable><isrequired>0</isrequired><displayname default="Autotask API username"><label description="Autotask API username" languagecode="1033" /></displayname><description default="Autotask API username"><label description="Autotask API username" languagecode="1033" /></description><type>100000000</type></environmentvariabledefinition>

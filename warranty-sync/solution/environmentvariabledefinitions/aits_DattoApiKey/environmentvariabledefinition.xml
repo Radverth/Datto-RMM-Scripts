@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<environmentvariabledefinition schemaname="aits_DattoApiKey"><introducedversion>1.0</introducedversion><iscustomizable>1</iscustomizable><isrequired>0</isrequired><displayname default="Datto RMM API key"><label description="Datto RMM API key" languagecode="1033" /></displayname><description default="Datto RMM API key"><label description="Datto RMM API key" languagecode="1033" /></description><type>100000000</type></environmentvariabledefinition>

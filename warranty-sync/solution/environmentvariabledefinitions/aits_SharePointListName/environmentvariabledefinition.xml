@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<environmentvariabledefinition schemaname="aits_SharePointListName"><defaultvalue>Warranty Sync State</defaultvalue><introducedversion>1.0</introducedversion><iscustomizable>1</iscustomizable><isrequired>0</isrequired><displayname default="SharePoint list name"><label description="SharePoint list name" languagecode="1033" /></displayname><description default="List title (or GUID)"><label description="List title (or GUID)" languagecode="1033" /></description><type>100000000</type></environmentvariabledefinition>

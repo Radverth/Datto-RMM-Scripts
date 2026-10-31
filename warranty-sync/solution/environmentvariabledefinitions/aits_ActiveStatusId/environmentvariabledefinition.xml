@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<environmentvariabledefinition schemaname="aits_ActiveStatusId"><introducedversion>1.0</introducedversion><iscustomizable>1</iscustomizable><isrequired>1</isrequired><displayname default="IT Glue Active status ID"><label description="IT Glue Active status ID" languagecode="1033" /></displayname><description default="GET /configuration_statuses"><label description="GET /configuration_statuses" languagecode="1033" /></description><type>100000000</type></environmentvariabledefinition>

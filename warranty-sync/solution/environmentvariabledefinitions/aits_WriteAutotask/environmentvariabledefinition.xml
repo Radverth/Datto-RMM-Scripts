@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<environmentvariabledefinition schemaname="aits_WriteAutotask"><defaultvalue>true</defaultvalue><introducedversion>1.0</introducedversion><iscustomizable>1</iscustomizable><isrequired>0</isrequired><displayname default="Write Autotask"><label description="Write Autotask" languagecode="1033" /></displayname><description default="true/false"><label description="true/false" languagecode="1033" /></description><type>100000000</type></environmentvariabledefinition>

@@ -1,0 +1,953 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "aits_sharedsharepointonline"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "aits_sharedoffice365"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "Dry run (aits_DryRun)": {
+          "defaultValue": "true",
+          "type": "String",
+          "metadata": {
+            "schemaName": "aits_DryRun"
+          }
+        },
+        "IT Glue Laptop type ID (aits_LaptopTypeId)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "aits_LaptopTypeId"
+          }
+        },
+        "IT Glue Desktop type ID (aits_DesktopTypeId)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "aits_DesktopTypeId"
+          }
+        },
+        "IT Glue Active status ID (aits_ActiveStatusId)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "aits_ActiveStatusId"
+          }
+        },
+        "myITProcess attribute name (aits_MyITPAttribute)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "aits_MyITPAttribute"
+          }
+        },
+        "Max writes per run (aits_MaxWritesPerRun)": {
+          "defaultValue": "1500",
+          "type": "String",
+          "metadata": {
+            "schemaName": "aits_MaxWritesPerRun"
+          }
+        },
+        "Write Autotask (aits_WriteAutotask)": {
+          "defaultValue": "true",
+          "type": "String",
+          "metadata": {
+            "schemaName": "aits_WriteAutotask"
+          }
+        },
+        "IT Glue base URI (aits_ITGlueBaseUri)": {
+          "defaultValue": "https://api.itglue.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "aits_ITGlueBaseUri"
+          }
+        },
+        "IT Glue API key (aits_ITGlueApiKey)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "aits_ITGlueApiKey"
+          }
+        },
+        "Datto RMM API URL (aits_DattoApiUrl)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "aits_DattoApiUrl"
+          }
+        },
+        "Datto RMM API key (aits_DattoApiKey)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "aits_DattoApiKey"
+          }
+        },
+        "Datto RMM API secret (aits_DattoApiSecret)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "aits_DattoApiSecret"
+          }
+        },
+        "Autotask REST base URI (aits_AutotaskBaseUri)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "aits_AutotaskBaseUri"
+          }
+        },
+        "Autotask API username (aits_AutotaskUsername)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "aits_AutotaskUsername"
+          }
+        },
+        "Autotask API secret (aits_AutotaskSecret)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "aits_AutotaskSecret"
+          }
+        },
+        "Autotask integration code (aits_AutotaskIntegrationCode)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "aits_AutotaskIntegrationCode"
+          }
+        },
+        "SharePoint site URL (aits_SharePointSiteUrl)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "aits_SharePointSiteUrl"
+          }
+        },
+        "SharePoint list name (aits_SharePointListName)": {
+          "defaultValue": "Warranty Sync State",
+          "type": "String",
+          "metadata": {
+            "schemaName": "aits_SharePointListName"
+          }
+        },
+        "Summary email recipient (aits_NotifyEmail)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "aits_NotifyEmail"
+          }
+        }
+      },
+      "triggers": {
+        "Recurrence": {
+          "type": "Recurrence",
+          "recurrence": {
+            "frequency": "Day",
+            "interval": 1,
+            "timeZone": "GMT Standard Time",
+            "schedule": {
+              "hours": [
+                "1"
+              ],
+              "minutes": [
+                0
+              ]
+            }
+          }
+        }
+      },
+      "actions": {
+        "Init_RunStart": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "RunStart",
+                "type": "string",
+                "value": "@utcNow()"
+              }
+            ]
+          },
+          "runAfter": {}
+        },
+        "Init_Devices": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "Devices",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {
+            "Init_RunStart": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Init_Page": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "Page",
+                "type": "integer",
+                "value": 1
+              }
+            ]
+          },
+          "runAfter": {
+            "Init_Devices": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Init_PageCount": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "PageCount",
+                "type": "integer",
+                "value": 0
+              }
+            ]
+          },
+          "runAfter": {
+            "Init_Page": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Init_DattoToken": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "DattoToken",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Init_PageCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Compose_TypeIds": {
+          "type": "Compose",
+          "inputs": "@createArray(parameters('IT Glue Laptop type ID (aits_LaptopTypeId)'), parameters('IT Glue Desktop type ID (aits_DesktopTypeId)'))",
+          "runAfter": {
+            "Init_DattoToken": [
+              "Succeeded"
+            ]
+          }
+        },
+        "If_live_get_token": {
+          "type": "If",
+          "expression": {
+            "equals": [
+              "@equals(toLower(parameters('Dry run (aits_DryRun)')),'false')",
+              true
+            ]
+          },
+          "actions": {
+            "Get_Datto_token": {
+              "type": "Http",
+              "inputs": {
+                "method": "POST",
+                "uri": "@{parameters('Datto RMM API URL (aits_DattoApiUrl)')}/auth/oauth/token",
+                "headers": {
+                  "Content-Type": "application/x-www-form-urlencoded"
+                },
+                "body": "grant_type=password&username=@{encodeUriComponent(parameters('Datto RMM API key (aits_DattoApiKey)'))}&password=@{encodeUriComponent(parameters('Datto RMM API secret (aits_DattoApiSecret)'))}",
+                "authentication": {
+                  "type": "Basic",
+                  "username": "public-client",
+                  "password": "public"
+                }
+              },
+              "runAfter": {},
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              }
+            },
+            "Set_DattoToken": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "DattoToken",
+                "value": "@body('Get_Datto_token')?['access_token']"
+              },
+              "runAfter": {
+                "Get_Datto_token": [
+                  "Succeeded"
+                ]
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          },
+          "runAfter": {
+            "Compose_TypeIds": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Foreach_Type": {
+          "type": "Foreach",
+          "foreach": "@outputs('Compose_TypeIds')",
+          "actions": {
+            "Reset_Page": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "Page",
+                "value": 1
+              },
+              "runAfter": {}
+            },
+            "Page_until_short": {
+              "type": "Until",
+              "expression": "@less(variables('PageCount'), 1000)",
+              "limit": {
+                "count": 100,
+                "timeout": "PT3H"
+              },
+              "actions": {
+                "Get_IT_Glue_page": {
+                  "type": "Http",
+                  "inputs": {
+                    "method": "GET",
+                    "uri": "@{parameters('IT Glue base URI (aits_ITGlueBaseUri)')}/configurations?filter[configuration_type_id]=@{items('Foreach_Type')}&filter[configuration_status_id]=@{parameters('IT Glue Active status ID (aits_ActiveStatusId)')}&filter[archived]=false&page[size]=1000&page[number]=@{variables('Page')}",
+                    "headers": {
+                      "x-api-key": "@parameters('IT Glue API key (aits_ITGlueApiKey)')",
+                      "Accept": "application/vnd.api+json"
+                    }
+                  },
+                  "runAfter": {},
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs"
+                      ]
+                    }
+                  }
+                },
+                "Select_Clean": {
+                  "type": "Select",
+                  "inputs": {
+                    "from": "@body('Get_IT_Glue_page')?['data']",
+                    "select": {
+                      "id": "@item()?['id']",
+                      "org": "@item()?['attributes']?['organization-name']",
+                      "name": "@item()?['attributes']?['name']",
+                      "serial": "@item()?['attributes']?['serial-number']",
+                      "rmm": "@string(coalesce(item()?['attributes']?['rmm-id'], ''))",
+                      "psa": "@string(coalesce(item()?['attributes']?['psa-id'], ''))",
+                      "glue": "@take(string(coalesce(item()?['attributes']?['warranty-expires-at'], '')), 10)",
+                      "mitp": "@take(string(coalesce(item()?['attributes']?[parameters('myITProcess attribute name (aits_MyITPAttribute)')], '')), 10)"
+                    }
+                  },
+                  "runAfter": {
+                    "Get_IT_Glue_page": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Set_PageCount": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "PageCount",
+                    "value": "@length(body('Get_IT_Glue_page')?['data'])"
+                  },
+                  "runAfter": {
+                    "Select_Clean": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Merge_Devices": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "Devices",
+                    "value": "@union(variables('Devices'), body('Select_Clean'))"
+                  },
+                  "runAfter": {
+                    "Set_PageCount": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Next_page": {
+                  "type": "IncrementVariable",
+                  "inputs": {
+                    "name": "Page",
+                    "value": 1
+                  },
+                  "runAfter": {
+                    "Merge_Devices": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Reset_Page": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runtimeConfiguration": {
+            "concurrency": {
+              "repetitions": 1
+            }
+          },
+          "runAfter": {
+            "If_live_get_token": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Select_Decided": {
+          "type": "Select",
+          "inputs": {
+            "from": "@variables('Devices')",
+            "select": {
+              "id": "@item()?['id']",
+              "org": "@item()?['org']",
+              "name": "@item()?['name']",
+              "serial": "@item()?['serial']",
+              "rmm": "@item()?['rmm']",
+              "psa": "@item()?['psa']",
+              "glue": "@item()?['glue']",
+              "mitp": "@item()?['mitp']",
+              "target": "@if(empty(item()?['mitp']), item()?['glue'], if(or(empty(item()?['glue']), less(item()?['glue'], item()?['mitp'])), item()?['mitp'], item()?['glue']))",
+              "later": "@and(not(empty(item()?['mitp'])), greater(item()?['glue'], item()?['mitp']))"
+            }
+          },
+          "runAfter": {
+            "Foreach_Type": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Get_State_items": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetItems",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "@parameters('SharePoint site URL (aits_SharePointSiteUrl)')",
+              "table": "@parameters('SharePoint list name (aits_SharePointListName)')",
+              "$select": "Title,PushedDate",
+              "$top": 5000
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Select_Decided": [
+              "Succeeded"
+            ]
+          },
+          "runtimeConfiguration": {
+            "paginationPolicy": {
+              "minimumItemCount": 100000
+            }
+          }
+        },
+        "Select_State": {
+          "type": "Select",
+          "inputs": {
+            "from": "@body('Get_State_items')?['value']",
+            "select": "@concat(item()?['Title'], '|', take(coalesce(item()?['PushedDate'], ''), 10))"
+          },
+          "runAfter": {
+            "Get_State_items": [
+              "Succeeded"
+            ]
+          }
+        },
+        "StateString": {
+          "type": "Compose",
+          "inputs": "@concat(',', join(body('Select_State'), ','), ',')",
+          "runAfter": {
+            "Select_State": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_ToPush": {
+          "type": "Query",
+          "inputs": {
+            "from": "@body('Select_Decided')",
+            "where": "@and(not(empty(item()?['target'])), not(contains(outputs('StateString'), concat(',', item()?['id'], '|', item()?['target'], ','))))"
+          },
+          "runAfter": {
+            "StateString": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Compose_Batch": {
+          "type": "Compose",
+          "inputs": "@take(body('Filter_ToPush'), int(parameters('Max writes per run (aits_MaxWritesPerRun)')))",
+          "runAfter": {
+            "Filter_ToPush": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Foreach_Batch": {
+          "type": "Foreach",
+          "foreach": "@outputs('Compose_Batch')",
+          "actions": {
+            "Get_State_row": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "GetItems",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('SharePoint site URL (aits_SharePointSiteUrl)')",
+                  "table": "@parameters('SharePoint list name (aits_SharePointListName)')",
+                  "$filter": "Title eq '@{items('Foreach_Batch')?['id']}'",
+                  "$top": 1
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            },
+            "Scope_ITGlue": {
+              "type": "Scope",
+              "actions": {
+                "If_glue_changed": {
+                  "type": "If",
+                  "expression": {
+                    "equals": [
+                      "@and(equals(toLower(parameters('Dry run (aits_DryRun)')),'false'), not(equals(items('Foreach_Batch')?['target'], items('Foreach_Batch')?['glue'])))",
+                      true
+                    ]
+                  },
+                  "actions": {
+                    "ITGlue_write": {
+                      "type": "Http",
+                      "inputs": {
+                        "method": "PATCH",
+                        "uri": "@{parameters('IT Glue base URI (aits_ITGlueBaseUri)')}/configurations/@{items('Foreach_Batch')?['id']}",
+                        "headers": {
+                          "x-api-key": "@parameters('IT Glue API key (aits_ITGlueApiKey)')",
+                          "Accept": "application/vnd.api+json",
+                          "Content-Type": "application/vnd.api+json"
+                        },
+                        "body": {
+                          "data": {
+                            "type": "configurations",
+                            "attributes": {
+                              "warranty-expires-at": "@items('Foreach_Batch')?['target']"
+                            }
+                          }
+                        }
+                      },
+                      "runAfter": {},
+                      "runtimeConfiguration": {
+                        "secureData": {
+                          "properties": [
+                            "inputs"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {}
+                  },
+                  "runAfter": {}
+                }
+              },
+              "runAfter": {
+                "Get_State_row": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              }
+            },
+            "Scope_Datto": {
+              "type": "Scope",
+              "actions": {
+                "If_rmm_present": {
+                  "type": "If",
+                  "expression": {
+                    "equals": [
+                      "@and(equals(toLower(parameters('Dry run (aits_DryRun)')),'false'), not(empty(items('Foreach_Batch')?['rmm'])))",
+                      true
+                    ]
+                  },
+                  "actions": {
+                    "Datto_write": {
+                      "type": "Http",
+                      "inputs": {
+                        "method": "POST",
+                        "uri": "@{parameters('Datto RMM API URL (aits_DattoApiUrl)')}/api/v2/device/@{items('Foreach_Batch')?['rmm']}/warranty",
+                        "headers": {
+                          "Authorization": "Bearer @{variables('DattoToken')}",
+                          "Content-Type": "application/json"
+                        },
+                        "body": {
+                          "warrantyDate": "@items('Foreach_Batch')?['target']"
+                        }
+                      },
+                      "runAfter": {},
+                      "runtimeConfiguration": {
+                        "secureData": {
+                          "properties": [
+                            "inputs"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {}
+                  },
+                  "runAfter": {}
+                }
+              },
+              "runAfter": {
+                "Scope_ITGlue": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              }
+            },
+            "Scope_Autotask": {
+              "type": "Scope",
+              "actions": {
+                "If_psa_present": {
+                  "type": "If",
+                  "expression": {
+                    "equals": [
+                      "@and(equals(toLower(parameters('Dry run (aits_DryRun)')),'false'), equals(toLower(parameters('Write Autotask (aits_WriteAutotask)')),'true'), not(empty(items('Foreach_Batch')?['psa'])))",
+                      true
+                    ]
+                  },
+                  "actions": {
+                    "Autotask_write": {
+                      "type": "Http",
+                      "inputs": {
+                        "method": "PATCH",
+                        "uri": "@{parameters('Autotask REST base URI (aits_AutotaskBaseUri)')}/ConfigurationItems",
+                        "headers": {
+                          "UserName": "@parameters('Autotask API username (aits_AutotaskUsername)')",
+                          "Secret": "@parameters('Autotask API secret (aits_AutotaskSecret)')",
+                          "ApiIntegrationCode": "@parameters('Autotask integration code (aits_AutotaskIntegrationCode)')",
+                          "Content-Type": "application/json"
+                        },
+                        "body": {
+                          "id": "@int(items('Foreach_Batch')?['psa'])",
+                          "warrantyExpirationDate": "@items('Foreach_Batch')?['target']"
+                        }
+                      },
+                      "runAfter": {},
+                      "runtimeConfiguration": {
+                        "secureData": {
+                          "properties": [
+                            "inputs"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {}
+                  },
+                  "runAfter": {}
+                }
+              },
+              "runAfter": {
+                "Scope_Datto": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              }
+            },
+            "Compose_HadError": {
+              "type": "Compose",
+              "inputs": "@or(equals(actions('Scope_ITGlue')?['status'], 'Failed'), equals(actions('Scope_Datto')?['status'], 'Failed'), equals(actions('Scope_Autotask')?['status'], 'Failed'))",
+              "runAfter": {
+                "Scope_Autotask": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              }
+            },
+            "Compose_Missing": {
+              "type": "Compose",
+              "inputs": "@or(empty(items('Foreach_Batch')?['rmm']), and(equals(toLower(parameters('Write Autotask (aits_WriteAutotask)')),'true'), empty(items('Foreach_Batch')?['psa'])))",
+              "runAfter": {
+                "Compose_HadError": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              }
+            },
+            "Compose_Status": {
+              "type": "Compose",
+              "inputs": "@if(outputs('Compose_HadError'), 'Error', if(not(equals(toLower(parameters('Dry run (aits_DryRun)')),'false')), 'Dry run', if(outputs('Compose_Missing'), 'Missing ID', if(items('Foreach_Batch')?['later'], 'Glue later – review', 'OK'))))",
+              "runAfter": {
+                "Compose_Missing": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              }
+            },
+            "Compose_Pushed": {
+              "type": "Compose",
+              "inputs": "@if(and(equals(toLower(parameters('Dry run (aits_DryRun)')),'false'), not(outputs('Compose_HadError')), not(outputs('Compose_Missing'))), items('Foreach_Batch')?['target'], if(greater(length(body('Get_State_row')?['value']), 0), coalesce(first(body('Get_State_row')?['value'])?['PushedDate'], ''), ''))",
+              "runAfter": {
+                "Compose_Status": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              }
+            },
+            "Compose_Note": {
+              "type": "Compose",
+              "inputs": "@concat(if(equals(actions('Scope_ITGlue')?['status'], 'Failed'), 'IT Glue write failed. ', ''), if(equals(actions('Scope_Datto')?['status'], 'Failed'), 'Datto RMM write failed. ', ''), if(equals(actions('Scope_Autotask')?['status'], 'Failed'), 'Autotask write failed. ', ''), if(empty(items('Foreach_Batch')?['rmm']), 'rmm-id missing. ', ''), if(and(equals(toLower(parameters('Write Autotask (aits_WriteAutotask)')),'true'), empty(items('Foreach_Batch')?['psa'])), 'psa-id missing. ', ''), if(or(equals(actions('Scope_ITGlue')?['status'], 'Failed'), equals(actions('Scope_Datto')?['status'], 'Failed'), equals(actions('Scope_Autotask')?['status'], 'Failed')), 'See flow run history.', ''))",
+              "runAfter": {
+                "Compose_Pushed": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              }
+            },
+            "If_row_exists": {
+              "type": "If",
+              "expression": {
+                "equals": [
+                  "@greater(length(body('Get_State_row')?['value']), 0)",
+                  true
+                ]
+              },
+              "actions": {
+                "Update_row": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "PatchItem",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('SharePoint site URL (aits_SharePointSiteUrl)')",
+                      "table": "@parameters('SharePoint list name (aits_SharePointListName)')",
+                      "item/Title": "@items('Foreach_Batch')?['id']",
+                      "item/Organisation": "@coalesce(items('Foreach_Batch')?['org'], '')",
+                      "item/Device": "@coalesce(items('Foreach_Batch')?['name'], '')",
+                      "item/Serial": "@coalesce(items('Foreach_Batch')?['serial'], '')",
+                      "item/MyITPDate": "@if(empty(items('Foreach_Batch')?['mitp']), null, items('Foreach_Batch')?['mitp'])",
+                      "item/GlueDate": "@if(empty(items('Foreach_Batch')?['glue']), null, items('Foreach_Batch')?['glue'])",
+                      "item/PushedDate": "@outputs('Compose_Pushed')",
+                      "item/Status/Value": "@outputs('Compose_Status')",
+                      "item/Note": "@outputs('Compose_Note')",
+                      "item/LastRun": "@utcNow()",
+                      "id": "@first(body('Get_State_row')?['value'])?['ID']"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {}
+                }
+              },
+              "else": {
+                "actions": {
+                  "Create_row": {
+                    "type": "OpenApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connectionName": "shared_sharepointonline",
+                        "operationId": "PostItem",
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                      },
+                      "parameters": {
+                        "dataset": "@parameters('SharePoint site URL (aits_SharePointSiteUrl)')",
+                        "table": "@parameters('SharePoint list name (aits_SharePointListName)')",
+                        "item/Title": "@items('Foreach_Batch')?['id']",
+                        "item/Organisation": "@coalesce(items('Foreach_Batch')?['org'], '')",
+                        "item/Device": "@coalesce(items('Foreach_Batch')?['name'], '')",
+                        "item/Serial": "@coalesce(items('Foreach_Batch')?['serial'], '')",
+                        "item/MyITPDate": "@if(empty(items('Foreach_Batch')?['mitp']), null, items('Foreach_Batch')?['mitp'])",
+                        "item/GlueDate": "@if(empty(items('Foreach_Batch')?['glue']), null, items('Foreach_Batch')?['glue'])",
+                        "item/PushedDate": "@outputs('Compose_Pushed')",
+                        "item/Status/Value": "@outputs('Compose_Status')",
+                        "item/Note": "@outputs('Compose_Note')",
+                        "item/LastRun": "@utcNow()"
+                      },
+                      "authentication": "@parameters('$authentication')"
+                    },
+                    "runAfter": {}
+                  }
+                }
+              },
+              "runAfter": {
+                "Compose_Note": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              }
+            }
+          },
+          "runtimeConfiguration": {
+            "concurrency": {
+              "repetitions": 5
+            }
+          },
+          "runAfter": {
+            "Compose_Batch": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Get_run_rows": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetItems",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "@parameters('SharePoint site URL (aits_SharePointSiteUrl)')",
+              "table": "@parameters('SharePoint list name (aits_SharePointListName)')",
+              "$filter": "LastRun ge '@{variables('RunStart')}'",
+              "$top": 5000
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Foreach_Batch": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ]
+          },
+          "runtimeConfiguration": {
+            "paginationPolicy": {
+              "minimumItemCount": 100000
+            }
+          }
+        },
+        "Filter_Errors": {
+          "type": "Query",
+          "inputs": {
+            "from": "@body('Get_run_rows')?['value']",
+            "where": "@equals(item()?['Status']?['Value'], 'Error')"
+          },
+          "runAfter": {
+            "Get_run_rows": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ]
+          }
+        },
+        "Send_summary": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_office365",
+              "operationId": "SendEmailV2",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+            },
+            "parameters": {
+              "emailMessage/To": "@parameters('Summary email recipient (aits_NotifyEmail)')",
+              "emailMessage/Subject": "Warranty Sync summary",
+              "emailMessage/Body": "<p>Warranty Sync finished (@{if(equals(toLower(parameters('Dry run (aits_DryRun)')),'false'), 'LIVE', 'DRY RUN')}).</p><ul><li>Devices read from IT Glue: @{length(body('Select_Decided'))}</li><li>Changes pending: @{length(body('Filter_ToPush'))}</li><li>Processed tonight: @{length(outputs('Compose_Batch'))}</li><li>Errors tonight: @{length(body('Filter_Errors'))}</li></ul><p><a href=\"@{parameters('SharePoint site URL (aits_SharePointSiteUrl)')}/Lists/WarrantySyncState/Needs%20attention.aspx\">Needs attention view</a></p>",
+              "emailMessage/Importance": "Normal"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Filter_Errors": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ]
+          }
+        }
+      }
+    },
+    "templateName": null
+  },
+  "schemaVersion": "1.0.0.0"
+}
