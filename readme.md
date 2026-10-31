@@ -10,6 +10,10 @@ This repo is a small collection of PowerShell scripts written to automate common
 
 `scripts/Set-LocalAdminAndSyncToITGlue.ps1` creates/updates a local admin account on a Windows PC and upserts that credential into IT Glue, associating it to the device Configuration by serial number.
 
+### Warranty date sync
+
+`scripts/Sync-WarrantyDates.ps1` reads active laptops/desktops from IT Glue, picks the correct warranty date (myITProcess vs IT Glue) and writes only changes to IT Glue, Datto RMM and Autotask. Dry run unless `-Apply`. Power Automate build sheet, connector and state-list schema are in `warranty-sync/`.
+
 ### Reset AD user password
 
 `scripts/Reset-ADPassword.ps1` runs on a Domain Controller, resets a single Active Directory user password, and unlocks the account.

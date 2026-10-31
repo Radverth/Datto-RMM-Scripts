@@ -1,0 +1,38 @@
+{
+  "swagger": "2.0",
+  "info": { "title": "Datto RMM Warranty", "description": "Set device warranty date in Datto RMM (API v2).", "version": "1.0" },
+  "host": "REPLACE-PLATFORM-api.centrastage.net",
+  "basePath": "/",
+  "schemes": ["https"],
+  "consumes": ["application/json"],
+  "produces": ["application/json"],
+  "paths": {
+    "/auth/oauth/token": {
+      "post": {
+        "operationId": "GetToken",
+        "summary": "Get access token",
+        "description": "Password grant. Send Basic public-client:public in the Authorization header.",
+        "consumes": ["application/x-www-form-urlencoded"],
+        "parameters": [
+          { "name": "Authorization", "in": "header", "required": true, "type": "string", "x-ms-visibility": "internal", "default": "Basic cHVibGljLWNsaWVudDpwdWJsaWM=" },
+          { "name": "grant_type", "in": "formData", "required": true, "type": "string", "default": "password", "x-ms-visibility": "internal" },
+          { "name": "username", "in": "formData", "required": true, "type": "string", "description": "Datto API key" },
+          { "name": "password", "in": "formData", "required": true, "type": "string", "description": "Datto API secret" }
+        ],
+        "responses": { "200": { "description": "OK", "schema": { "type": "object", "properties": { "access_token": { "type": "string" }, "expires_in": { "type": "integer" } } } } }
+      }
+    },
+    "/api/v2/device/{deviceUid}/warranty": {
+      "post": {
+        "operationId": "SetDeviceWarranty",
+        "summary": "Set device warranty date",
+        "parameters": [
+          { "name": "Authorization", "in": "header", "required": true, "type": "string", "description": "Bearer <access_token>" },
+          { "name": "deviceUid", "in": "path", "required": true, "type": "string", "description": "Datto device UID (IT Glue rmm-id)" },
+          { "name": "body", "in": "body", "required": true, "schema": { "type": "object", "required": ["warrantyDate"], "properties": { "warrantyDate": { "type": "string", "description": "yyyy-MM-dd" } } } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    }
+  }
+}
