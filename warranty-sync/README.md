@@ -54,4 +54,4 @@ Notes
   connector IDs to remap. `datto-rmm-connector.swagger.json` remains if you prefer a connector.
 - API keys are plain Text environment variables. For better protection change them to the Secret type backed by Azure Key Vault.
 - Status is stored as `Glue later – review` (en dash), matching the list choice created by the script.
-- Generated without access to a tenant, so it has not been test-imported; see the run notes below if the import wizard objects.
+- Generated without access to a tenant, so it has not been test-imported.
