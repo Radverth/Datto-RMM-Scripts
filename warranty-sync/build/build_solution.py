@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the importable Power Automate solution (WarrantySync_1_0_0_3.zip).
+"""Generate the importable Power Automate solution (WarrantySync_1_0_0_4.zip).
 
 Run:  python3 warranty-sync/build/build_solution.py
 Writes the unpacked source to warranty-sync/solution/ and the zip to warranty-sync/.
@@ -10,7 +10,7 @@ from xml.sax.saxutils import escape, quoteattr
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.dirname(HERE)
 SRC = os.path.join(OUT, "solution")
-ZIP = os.path.join(OUT, "WarrantySync_1_0_0_3.zip")
+ZIP = os.path.join(OUT, "WarrantySync_1_0_0_4.zip")
 
 PREFIX = "new"  # matches the environment default publisher (see PUBLISHER below)
 WF_ID = "7b1d3a52-4c6e-4f0a-9a37-2d5e8c1f0b64"
@@ -122,6 +122,8 @@ CONNECTORS = {
   "name": "new_5Fwsautotask", "id": "c51e7b38-9f2a-4e6d-b4c1-2d7a8e9f0b56", "display": "AutotaskWarrantySync",
   "desc": "Autotask REST API: update configuration item warranty date.", "color": "#e5622b",
   "swagger": swagger("AutotaskWarrantySync", "Autotask REST API for the warranty sync", "webservices4.autotask.net", "/atservicesrest/V1.0", {
+     "/ConfigurationItems/{id}": {"get": {"responses": ANY, "summary": "Get configuration item", "operationId": "GetConfigurationItem",
+        "parameters": [{"name": "id", "in": "path", "required": True, "type": "string", "description": "Autotask configuration item ID (IT Glue psa-id)"}]}},
      "/ConfigurationItems": {"patch": {"responses": ANY, "summary": "Update configuration item", "operationId": "UpdateConfigurationItem",
         "parameters": [{"name": "body", "in": "body", "required": True, "schema": {"type": "object", "properties": {
              "id": {"type": "integer", "format": "int64"}, "warrantyExpirationDate": {"type": "string", "description": "yyyy-MM-dd"}}}}]}}},
@@ -129,8 +131,8 @@ CONNECTORS = {
   "params": dict(**conn_param("api_key", "Autotask API secret", "Secret of the Autotask API user", True, 2),
                  **conn_param("username", "Autotask API username", "Username of the Autotask API user", False, 3),
                  **conn_param("integrationCode", "Autotask integration code", "Tracking identifier of the API user", True, 4)),
-  "policies": [setheader("Set username", "UserName", "@connectionParameters('username')", ["UpdateConfigurationItem"]),
-               setheader("Set integration code", "ApiIntegrationcode", "@connectionParameters('integrationCode')", ["UpdateConfigurationItem"]),
+  "policies": [setheader("Set username", "UserName", "@connectionParameters('username')", ["GetConfigurationItem", "UpdateConfigurationItem"]),
+               setheader("Set integration code", "ApiIntegrationcode", "@connectionParameters('integrationCode')", ["GetConfigurationItem", "UpdateConfigurationItem"]),
                setheader("Set content type", "Content-Type", "application/json", ["UpdateConfigurationItem"])],
  },
 }
@@ -340,12 +342,114 @@ flow = {"properties": {
                    "actions": actions},
     "templateName": None}, "schemaVersion": "1.0.0.0"}
 
+# ---- flow 2: Autotask only ------------------------------------------------------------------------
+# Reads IT Glue with the same date rules, reads each Autotask configuration item and writes the warranty
+# date only where Autotask differs. Touches nothing else (no IT Glue / Datto writes, no state list), so it
+# can be run on demand at any time; Autotask itself is the "only changes" check.
+AT_WF_ID = "2d6f8b14-7a3c-4e95-b1d8-5c0e9a4f7b23"
+AT_FLOW_NAME = "Warranty Sync - Autotask Only"
+AT = "items('Foreach_Device')"
+at_current = "outputs('Compose_Current')"
+
+def result_row(current, result):
+    return {"org": "@%s?['org']" % AT, "device": "@%s?['name']" % AT, "psa": "@%s?['psa']" % AT,
+            "autotask": current, "target": "@%s?['target']" % AT, "result": result}
+
+at_device_actions = {
+    "Get_CI": cc("autotask", "GetConfigurationItem", {"id": "@{%s?['psa']}" % AT}, secure=None),
+    "Compose_Current": {"type": "Compose", "runAfter": {"Get_CI": ["Succeeded"]},
+        "inputs": "@take(string(coalesce(body('Get_CI')?['item']?['warrantyExpirationDate'], '')), 10)"},
+    "If_differs": {"type": "If", "runAfter": {"Compose_Current": ["Succeeded"]},
+        "expression": {"equals": ["@not(equals(%s, %s?['target']))" % (at_current, AT), True]},
+        "actions": {
+            "Scope_Write": {"type": "Scope", "runAfter": {}, "actions": {"If_live_write": cond(live, {
+                "Autotask_update": cc("autotask", "UpdateConfigurationItem", {"body/id": "@int(%s?['psa'])" % AT,
+                    "body/warrantyExpirationDate": "@%s?['target']" % AT}, secure=None)})}},
+            "Record_change": {"type": "AppendToArrayVariable", "runAfter": {"Scope_Write": ALL},
+                "inputs": {"name": "Results", "value": result_row("@" + at_current,
+                    "@if(%s, 'Error', if(%s, 'Updated', 'Would update'))" % (failed("Scope_Write"), live))}}},
+        "else": {"actions": {}}},
+    "Record_lookup_error": {"type": "AppendToArrayVariable", "runAfter": {"Get_CI": ["Failed", "TimedOut"]},
+        "inputs": {"name": "Results", "value": result_row("", "Autotask lookup failed")}},
+}
+
+at_summary = ("<p>Warranty Sync - Autotask Only finished (@{if(%s, 'LIVE', 'DRY RUN')}).</p><ul>"
+    "<li>Devices read from IT Glue: @{length(body('Select_Decided'))}</li>"
+    "<li>With a psa-id and a warranty date: @{length(body('Filter_Autotask'))}</li>"
+    "<li>Checked this run: @{length(outputs('Compose_Batch'))}</li>"
+    "<li>@{if(%s, 'Updated', 'Would update')}: @{length(body('Filter_Changed'))}</li>"
+    "<li>Errors: @{length(body('Filter_Failed'))}</li></ul>"
+    "<p>Only devices whose Autotask date differs are listed.</p>@{body('Results_table')}") % (live, live)
+
+at_actions = {
+    "Init_Devices": {"type": "InitializeVariable", "inputs": {"variables": [{"name": "Devices", "type": "array", "value": []}]}},
+    "Init_Page": {"type": "InitializeVariable", "inputs": {"variables": [{"name": "Page", "type": "integer", "value": 1}]}},
+    "Init_PageCount": {"type": "InitializeVariable", "inputs": {"variables": [{"name": "PageCount", "type": "integer", "value": 0}]}},
+    "Init_Results": {"type": "InitializeVariable", "inputs": {"variables": [{"name": "Results", "type": "array", "value": []}]}},
+    "Compose_TypeIds": {"type": "Compose", "inputs": "@createArray(%s, %s)" % (P("LaptopTypeId"), P("DesktopTypeId"))},
+    "Foreach_Type": {"type": "Foreach", "foreach": "@outputs('Compose_TypeIds')",
+                     "actions": json.loads(json.dumps(foreach_type_actions)),
+                     "runtimeConfiguration": {"concurrency": {"repetitions": 1}}},
+    "Select_Decided": {"type": "Select", "inputs": {"from": "@variables('Devices')", "select": decided}},
+    "Filter_Autotask": {"type": "Query", "inputs": {"from": "@body('Select_Decided')",
+                        "where": "@and(not(empty(item()?['target'])), not(empty(item()?['psa'])))"}},
+    "Compose_Batch": {"type": "Compose", "inputs": "@take(body('Filter_Autotask'), int(%s))" % P("MaxWritesPerRun")},
+    # concurrency 1: Results is appended to from inside the loop
+    "Foreach_Device": {"type": "Foreach", "foreach": "@outputs('Compose_Batch')", "actions": at_device_actions,
+                       "runtimeConfiguration": {"concurrency": {"repetitions": 1}}},
+    "Filter_Changed": {"type": "Query", "inputs": {"from": "@variables('Results')",
+                       "where": "@contains(createArray('Updated', 'Would update'), item()?['result'])"}},
+    "Filter_Failed": {"type": "Query", "inputs": {"from": "@variables('Results')",
+                      "where": "@not(contains(createArray('Updated', 'Would update'), item()?['result']))"}},
+    "Results_table": {"type": "Table", "inputs": {"from": "@variables('Results')", "format": "HTML"}},
+    "Send_summary": {"type": "OpenApiConnection", "inputs": {
+        "host": {"connectionName": "shared_office365", "operationId": "SendEmailV2", "apiId": O365_API},
+        "parameters": {"emailMessage/To": "@" + P("NotifyEmail"), "emailMessage/Subject": "Warranty Sync - Autotask Only summary",
+                       "emailMessage/Body": at_summary, "emailMessage/Importance": "Normal"},
+        "authentication": "@parameters('$authentication')"}},
+}
+at_order = ["Init_Devices", "Init_Page", "Init_PageCount", "Init_Results", "Compose_TypeIds", "Foreach_Type",
+            "Select_Decided", "Filter_Autotask", "Compose_Batch", "Foreach_Device", "Filter_Changed", "Filter_Failed",
+            "Results_table", "Send_summary"]
+prev = None
+for n in at_order:
+    at_actions[n]["runAfter"] = {prev: (ALL if n in at_order[at_order.index("Filter_Changed"):] else ["Succeeded"])} if prev else {}
+    prev = n
+
+AT_ENV = ["DryRun", "LaptopTypeId", "DesktopTypeId", "ActiveStatusId", "MyITPAttribute", "MaxWritesPerRun", "NotifyEmail"]
+at_params = {"$connections": {"defaultValue": {}, "type": "Object"},
+             "$authentication": {"defaultValue": {}, "type": "SecureObject"}}
+for k in AT_ENV:
+    disp, dflt = ENV[k][0], ENV[k][1]
+    at_params["%s (%s_%s)" % (disp, PREFIX, k)] = {"defaultValue": dflt or "", "type": "String",
+                                                   "metadata": {"schemaName": "%s_%s" % (PREFIX, k)}}
+
+def ref(c): return {"runtimeSource": "embedded", "connection": {"connectionReferenceLogicalName": c["connref"]},
+                    "api": {"name": c["api"], "logicalName": c["name"]}}
+at_flow = {"properties": {
+    "connectionReferences": {
+        "shared_office365": {"runtimeSource": "embedded", "connection": {"connectionReferenceLogicalName": PREFIX + "_sharedoffice365_wsync"},
+                             "api": {"name": "shared_office365"}},
+        CONNECTORS["itglue"]["api"]: ref(CONNECTORS["itglue"]),
+        CONNECTORS["autotask"]["api"]: ref(CONNECTORS["autotask"])},
+    "definition": {"$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                   "contentVersion": "1.0.0.0", "parameters": at_params,
+                   "triggers": {"manual": {"type": "Request", "kind": "Button",
+                                           "inputs": {"schema": {"type": "object", "properties": {}, "required": []}}}},
+                   "actions": at_actions},
+    "templateName": None}, "schemaVersion": "1.0.0.0"}
+
+FLOWS = [
+    {"id": WF_ID, "name": FLOW_NAME, "file": "/Workflows/WarrantySync-Nightly-%s.json" % WF_ID.upper(), "flow": flow},
+    {"id": AT_WF_ID, "name": AT_FLOW_NAME, "file": "/Workflows/WarrantySync-AutotaskOnly-%s.json" % AT_WF_ID.upper(), "flow": at_flow},
+]
+
 # ---- solution files ---------------------------------------------------------------------------
 # Layout, element order, CRLF endings and the publisher mirror a solution exported from the target
 # environment (AutotaskaBillitySync_1_0_0_13.zip), which is known to import.
 ORGVER = 'OrganizationVersion="9.2.26102.127" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26102.00127"'
 PUBLISHER = ("DefaultPublisherorgda80817a", "Default Publisher for orgda80817a", "Default publisher for this organization")
-VERSION = "1.0.0.3"
+VERSION = "1.0.0.4"
 
 def write(path, text, bom=False):
     full = os.path.join(SRC, path); os.makedirs(os.path.dirname(full), exist_ok=True)
@@ -357,8 +461,8 @@ def label(tag, text, ind):
             % (ind, tag, quoteattr(text), ind, quoteattr(text), ind, tag))
 
 shutil.rmtree(SRC, ignore_errors=True)
-wf_file = "/Workflows/WarrantySync-Nightly-%s.json" % WF_ID.upper()
-write(wf_file.lstrip("/"), json.dumps(flow, indent=2, ensure_ascii=False))
+for f in FLOWS:
+    write(f["file"].lstrip("/"), json.dumps(f["flow"], indent=2, ensure_ascii=False))
 write("[Content_Types].xml", '<?xml version="1.0" encoding="utf-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
       '<Default Extension="xml" ContentType="application/octet-stream" /><Default Extension="json" ContentType="application/octet-stream" /><Default Extension="Png" ContentType="application/octet-stream" /></Types>', bom=True)
 
@@ -395,7 +499,8 @@ write("solution.xml",
  '      <EMailAddress xsi:nil="true"></EMailAddress>\n      <SupportingWebsiteUrl xsi:nil="true"></SupportingWebsiteUrl>\n'
  '      <CustomizationPrefix>%s</CustomizationPrefix>\n      <CustomizationOptionValuePrefix>10000</CustomizationOptionValuePrefix>\n' % PREFIX +
  '      <Addresses>\n' + address(1) + address(2) + '      </Addresses>\n    </Publisher>\n'
- '    <RootComponents>\n      <RootComponent type="29" id="{%s}" behavior="0" />\n' % WF_ID +
+ '    <RootComponents>\n' +
+ "".join('      <RootComponent type="29" id="{%s}" behavior="0" />\n' % f["id"] for f in FLOWS) +
  "".join('      <RootComponent type="372" id="{%s}" schemaName="%s" behavior="0" />\n' % (c["id"], c["name"]) for c in CONNECTORS.values()) +
  '    </RootComponents>\n' +
  '    <MissingDependencies />\n  </SolutionManifest>\n</ImportExportXml>')
@@ -407,6 +512,19 @@ def connref(logical, disp, api, custom_id=None):
             ('      <customconnectorid>\n        <connectorid>%s</connectorid>\n      </customconnectorid>\n' % custom_id if custom_id else '') +
             '      <iscustomizable>1</iscustomizable>\n      <promptingbehavior>0</promptingbehavior>\n'
             '      <statecode>0</statecode>\n      <statuscode>1</statuscode>\n    </connectionreference>\n')
+
+def workflow_xml(f):
+    return ('    <Workflow WorkflowId="{%s}" Name=%s>\n' % (f["id"], quoteattr(f["name"])) +
+     '      <JsonFileName>%s</JsonFileName>\n' % f["file"] +
+     '      <Type>1</Type>\n      <Subprocess>0</Subprocess>\n      <Category>5</Category>\n      <Mode>0</Mode>\n      <Scope>4</Scope>\n'
+     '      <OnDemand>0</OnDemand>\n      <TriggerOnCreate>0</TriggerOnCreate>\n      <TriggerOnDelete>0</TriggerOnDelete>\n'
+     '      <AsyncAutodelete>0</AsyncAutodelete>\n      <SyncWorkflowLogOnFailure>0</SyncWorkflowLogOnFailure>\n'
+     '      <StateCode>0</StateCode>\n      <StatusCode>1</StatusCode>\n      <RunAs>1</RunAs>\n      <IsTransacted>1</IsTransacted>\n'
+     '      <IntroducedVersion>%s</IntroducedVersion>\n      <IsCustomizable>1</IsCustomizable>\n' % VERSION +
+     '      <IsCustomProcessingStepAllowedForOtherPublishers>1</IsCustomProcessingStepAllowedForOtherPublishers>\n'
+     '      <ModernFlowType>0</ModernFlowType>\n      <PrimaryEntity>none</PrimaryEntity>\n'
+     '      <LocalizedNames>\n        <LocalizedName languagecode="1033" description=%s />\n      </LocalizedNames>\n' % quoteattr(f["name"]) +
+     '    </Workflow>\n')
 
 def connector_xml(c):
     n = c["name"]
@@ -420,18 +538,9 @@ def connector_xml(c):
 
 write("customizations.xml",
  '<ImportExportXml xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" %s>\n' % ORGVER +
- '  <Entities></Entities>\n  <Roles></Roles>\n  <Workflows>\n'
- '    <Workflow WorkflowId="{%s}" Name=%s>\n' % (WF_ID, quoteattr(FLOW_NAME)) +
- '      <JsonFileName>%s</JsonFileName>\n' % wf_file +
- '      <Type>1</Type>\n      <Subprocess>0</Subprocess>\n      <Category>5</Category>\n      <Mode>0</Mode>\n      <Scope>4</Scope>\n'
- '      <OnDemand>0</OnDemand>\n      <TriggerOnCreate>0</TriggerOnCreate>\n      <TriggerOnDelete>0</TriggerOnDelete>\n'
- '      <AsyncAutodelete>0</AsyncAutodelete>\n      <SyncWorkflowLogOnFailure>0</SyncWorkflowLogOnFailure>\n'
- '      <StateCode>0</StateCode>\n      <StatusCode>1</StatusCode>\n      <RunAs>1</RunAs>\n      <IsTransacted>1</IsTransacted>\n'
- '      <IntroducedVersion>%s</IntroducedVersion>\n      <IsCustomizable>1</IsCustomizable>\n' % VERSION +
- '      <IsCustomProcessingStepAllowedForOtherPublishers>1</IsCustomProcessingStepAllowedForOtherPublishers>\n'
- '      <ModernFlowType>0</ModernFlowType>\n      <PrimaryEntity>none</PrimaryEntity>\n'
- '      <LocalizedNames>\n        <LocalizedName languagecode="1033" description=%s />\n      </LocalizedNames>\n' % quoteattr(FLOW_NAME) +
- '    </Workflow>\n  </Workflows>\n  <FieldSecurityProfiles></FieldSecurityProfiles>\n  <Templates />\n  <EntityMaps />\n'
+ '  <Entities></Entities>\n  <Roles></Roles>\n  <Workflows>\n' +
+ "".join(workflow_xml(f) for f in FLOWS) +
+ '  </Workflows>\n  <FieldSecurityProfiles></FieldSecurityProfiles>\n  <Templates />\n  <EntityMaps />\n' +
  '  <EntityRelationships />\n  <OrganizationSettings />\n  <optionsets />\n  <CustomControls />\n  <EntityDataProviders />\n'
  '  <Connectors>\n' + "".join(connector_xml(c) for c in CONNECTORS.values()) + '  </Connectors>\n'
  '  <connectionreferences>\n' +

@@ -1,0 +1,551 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "new_sharedoffice365_wsync"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      },
+      "shared_new-5fwsitglue-5f7e14506b88214820": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "new_shared5fwsitglue5f7e14506b88214820_wsync"
+        },
+        "api": {
+          "name": "shared_new-5fwsitglue-5f7e14506b88214820",
+          "logicalName": "new_5Fwsitglue"
+        }
+      },
+      "shared_new-5fwsautotask-5f7e14506b88214820": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "new_shared5fwsautotask5f7e14506b88214820_wsync"
+        },
+        "api": {
+          "name": "shared_new-5fwsautotask-5f7e14506b88214820",
+          "logicalName": "new_5Fwsautotask"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "Dry run (new_DryRun)": {
+          "defaultValue": "true",
+          "type": "String",
+          "metadata": {
+            "schemaName": "new_DryRun"
+          }
+        },
+        "IT Glue Laptop type ID (new_LaptopTypeId)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "new_LaptopTypeId"
+          }
+        },
+        "IT Glue Desktop type ID (new_DesktopTypeId)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "new_DesktopTypeId"
+          }
+        },
+        "IT Glue Active status ID (new_ActiveStatusId)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "new_ActiveStatusId"
+          }
+        },
+        "myITProcess attribute name (new_MyITPAttribute)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "new_MyITPAttribute"
+          }
+        },
+        "Max writes per run (new_MaxWritesPerRun)": {
+          "defaultValue": "1500",
+          "type": "String",
+          "metadata": {
+            "schemaName": "new_MaxWritesPerRun"
+          }
+        },
+        "Summary email recipient (new_NotifyEmail)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "new_NotifyEmail"
+          }
+        }
+      },
+      "triggers": {
+        "manual": {
+          "type": "Request",
+          "kind": "Button",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {},
+              "required": []
+            }
+          }
+        }
+      },
+      "actions": {
+        "Init_Devices": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "Devices",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {}
+        },
+        "Init_Page": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "Page",
+                "type": "integer",
+                "value": 1
+              }
+            ]
+          },
+          "runAfter": {
+            "Init_Devices": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Init_PageCount": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "PageCount",
+                "type": "integer",
+                "value": 0
+              }
+            ]
+          },
+          "runAfter": {
+            "Init_Page": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Init_Results": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "Results",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {
+            "Init_PageCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Compose_TypeIds": {
+          "type": "Compose",
+          "inputs": "@createArray(parameters('IT Glue Laptop type ID (new_LaptopTypeId)'), parameters('IT Glue Desktop type ID (new_DesktopTypeId)'))",
+          "runAfter": {
+            "Init_Results": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Foreach_Type": {
+          "type": "Foreach",
+          "foreach": "@outputs('Compose_TypeIds')",
+          "actions": {
+            "Reset_Page": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "Page",
+                "value": 1
+              },
+              "runAfter": {}
+            },
+            "Page_until_short": {
+              "type": "Until",
+              "expression": "@less(variables('PageCount'), 1000)",
+              "limit": {
+                "count": 100,
+                "timeout": "PT3H"
+              },
+              "actions": {
+                "Get_IT_Glue_page": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_new-5fwsitglue-5f7e14506b88214820",
+                      "operationId": "ListConfigurations",
+                      "connectionName": "shared_new-5fwsitglue-5f7e14506b88214820"
+                    },
+                    "parameters": {
+                      "typeId": "@{items('Foreach_Type')}",
+                      "statusId": "@{parameters('IT Glue Active status ID (new_ActiveStatusId)')}",
+                      "pageSize": "1000",
+                      "pageNumber": "@{variables('Page')}"
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "Select_Clean": {
+                  "type": "Select",
+                  "inputs": {
+                    "from": "@body('Get_IT_Glue_page')?['data']",
+                    "select": {
+                      "id": "@item()?['id']",
+                      "org": "@item()?['attributes']?['organization-name']",
+                      "name": "@item()?['attributes']?['name']",
+                      "serial": "@item()?['attributes']?['serial-number']",
+                      "rmm": "@string(coalesce(item()?['attributes']?['rmm-id'], ''))",
+                      "psa": "@string(coalesce(item()?['attributes']?['psa-id'], ''))",
+                      "glue": "@take(string(coalesce(item()?['attributes']?['warranty-expires-at'], '')), 10)",
+                      "mitp": "@take(string(coalesce(item()?['attributes']?[parameters('myITProcess attribute name (new_MyITPAttribute)')], '')), 10)"
+                    }
+                  },
+                  "runAfter": {
+                    "Get_IT_Glue_page": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Set_PageCount": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "PageCount",
+                    "value": "@length(body('Get_IT_Glue_page')?['data'])"
+                  },
+                  "runAfter": {
+                    "Select_Clean": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Merge_Devices": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "Devices",
+                    "value": "@union(variables('Devices'), body('Select_Clean'))"
+                  },
+                  "runAfter": {
+                    "Set_PageCount": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Next_page": {
+                  "type": "IncrementVariable",
+                  "inputs": {
+                    "name": "Page",
+                    "value": 1
+                  },
+                  "runAfter": {
+                    "Merge_Devices": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Reset_Page": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runtimeConfiguration": {
+            "concurrency": {
+              "repetitions": 1
+            }
+          },
+          "runAfter": {
+            "Compose_TypeIds": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Select_Decided": {
+          "type": "Select",
+          "inputs": {
+            "from": "@variables('Devices')",
+            "select": {
+              "id": "@item()?['id']",
+              "org": "@item()?['org']",
+              "name": "@item()?['name']",
+              "serial": "@item()?['serial']",
+              "rmm": "@item()?['rmm']",
+              "psa": "@item()?['psa']",
+              "glue": "@item()?['glue']",
+              "mitp": "@item()?['mitp']",
+              "target": "@if(empty(item()?['mitp']), item()?['glue'], if(or(empty(item()?['glue']), less(item()?['glue'], item()?['mitp'])), item()?['mitp'], item()?['glue']))",
+              "later": "@and(not(empty(item()?['mitp'])), greater(item()?['glue'], item()?['mitp']))"
+            }
+          },
+          "runAfter": {
+            "Foreach_Type": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_Autotask": {
+          "type": "Query",
+          "inputs": {
+            "from": "@body('Select_Decided')",
+            "where": "@and(not(empty(item()?['target'])), not(empty(item()?['psa'])))"
+          },
+          "runAfter": {
+            "Select_Decided": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Compose_Batch": {
+          "type": "Compose",
+          "inputs": "@take(body('Filter_Autotask'), int(parameters('Max writes per run (new_MaxWritesPerRun)')))",
+          "runAfter": {
+            "Filter_Autotask": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Foreach_Device": {
+          "type": "Foreach",
+          "foreach": "@outputs('Compose_Batch')",
+          "actions": {
+            "Get_CI": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_new-5fwsautotask-5f7e14506b88214820",
+                  "operationId": "GetConfigurationItem",
+                  "connectionName": "shared_new-5fwsautotask-5f7e14506b88214820"
+                },
+                "parameters": {
+                  "id": "@{items('Foreach_Device')?['psa']}"
+                }
+              },
+              "runAfter": {}
+            },
+            "Compose_Current": {
+              "type": "Compose",
+              "runAfter": {
+                "Get_CI": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": "@take(string(coalesce(body('Get_CI')?['item']?['warrantyExpirationDate'], '')), 10)"
+            },
+            "If_differs": {
+              "type": "If",
+              "runAfter": {
+                "Compose_Current": [
+                  "Succeeded"
+                ]
+              },
+              "expression": {
+                "equals": [
+                  "@not(equals(outputs('Compose_Current'), items('Foreach_Device')?['target']))",
+                  true
+                ]
+              },
+              "actions": {
+                "Scope_Write": {
+                  "type": "Scope",
+                  "runAfter": {},
+                  "actions": {
+                    "If_live_write": {
+                      "type": "If",
+                      "expression": {
+                        "equals": [
+                          "@equals(toLower(parameters('Dry run (new_DryRun)')),'false')",
+                          true
+                        ]
+                      },
+                      "actions": {
+                        "Autotask_update": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_new-5fwsautotask-5f7e14506b88214820",
+                              "operationId": "UpdateConfigurationItem",
+                              "connectionName": "shared_new-5fwsautotask-5f7e14506b88214820"
+                            },
+                            "parameters": {
+                              "body/id": "@int(items('Foreach_Device')?['psa'])",
+                              "body/warrantyExpirationDate": "@items('Foreach_Device')?['target']"
+                            }
+                          },
+                          "runAfter": {}
+                        }
+                      },
+                      "else": {
+                        "actions": {}
+                      },
+                      "runAfter": {}
+                    }
+                  }
+                },
+                "Record_change": {
+                  "type": "AppendToArrayVariable",
+                  "runAfter": {
+                    "Scope_Write": [
+                      "Succeeded",
+                      "Failed",
+                      "Skipped",
+                      "TimedOut"
+                    ]
+                  },
+                  "inputs": {
+                    "name": "Results",
+                    "value": {
+                      "org": "@items('Foreach_Device')?['org']",
+                      "device": "@items('Foreach_Device')?['name']",
+                      "psa": "@items('Foreach_Device')?['psa']",
+                      "autotask": "@outputs('Compose_Current')",
+                      "target": "@items('Foreach_Device')?['target']",
+                      "result": "@if(equals(actions('Scope_Write')?['status'], 'Failed'), 'Error', if(equals(toLower(parameters('Dry run (new_DryRun)')),'false'), 'Updated', 'Would update'))"
+                    }
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              }
+            },
+            "Record_lookup_error": {
+              "type": "AppendToArrayVariable",
+              "runAfter": {
+                "Get_CI": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "name": "Results",
+                "value": {
+                  "org": "@items('Foreach_Device')?['org']",
+                  "device": "@items('Foreach_Device')?['name']",
+                  "psa": "@items('Foreach_Device')?['psa']",
+                  "autotask": "",
+                  "target": "@items('Foreach_Device')?['target']",
+                  "result": "Autotask lookup failed"
+                }
+              }
+            }
+          },
+          "runtimeConfiguration": {
+            "concurrency": {
+              "repetitions": 1
+            }
+          },
+          "runAfter": {
+            "Compose_Batch": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_Changed": {
+          "type": "Query",
+          "inputs": {
+            "from": "@variables('Results')",
+            "where": "@contains(createArray('Updated', 'Would update'), item()?['result'])"
+          },
+          "runAfter": {
+            "Foreach_Device": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ]
+          }
+        },
+        "Filter_Failed": {
+          "type": "Query",
+          "inputs": {
+            "from": "@variables('Results')",
+            "where": "@not(contains(createArray('Updated', 'Would update'), item()?['result']))"
+          },
+          "runAfter": {
+            "Filter_Changed": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ]
+          }
+        },
+        "Results_table": {
+          "type": "Table",
+          "inputs": {
+            "from": "@variables('Results')",
+            "format": "HTML"
+          },
+          "runAfter": {
+            "Filter_Failed": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ]
+          }
+        },
+        "Send_summary": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_office365",
+              "operationId": "SendEmailV2",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+            },
+            "parameters": {
+              "emailMessage/To": "@parameters('Summary email recipient (new_NotifyEmail)')",
+              "emailMessage/Subject": "Warranty Sync - Autotask Only summary",
+              "emailMessage/Body": "<p>Warranty Sync - Autotask Only finished (@{if(equals(toLower(parameters('Dry run (new_DryRun)')),'false'), 'LIVE', 'DRY RUN')}).</p><ul><li>Devices read from IT Glue: @{length(body('Select_Decided'))}</li><li>With a psa-id and a warranty date: @{length(body('Filter_Autotask'))}</li><li>Checked this run: @{length(outputs('Compose_Batch'))}</li><li>@{if(equals(toLower(parameters('Dry run (new_DryRun)')),'false'), 'Updated', 'Would update')}: @{length(body('Filter_Changed'))}</li><li>Errors: @{length(body('Filter_Failed'))}</li></ul><p>Only devices whose Autotask date differs are listed.</p>@{body('Results_table')}",
+              "emailMessage/Importance": "Normal"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Results_table": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ]
+          }
+        }
+      }
+    },
+    "templateName": null
+  },
+  "schemaVersion": "1.0.0.0"
+}

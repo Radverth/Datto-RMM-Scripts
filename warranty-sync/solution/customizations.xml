@@ -18,13 +18,38 @@
       <StatusCode>1</StatusCode>
       <RunAs>1</RunAs>
       <IsTransacted>1</IsTransacted>
-      <IntroducedVersion>1.0.0.3</IntroducedVersion>
+      <IntroducedVersion>1.0.0.4</IntroducedVersion>
       <IsCustomizable>1</IsCustomizable>
       <IsCustomProcessingStepAllowedForOtherPublishers>1</IsCustomProcessingStepAllowedForOtherPublishers>
       <ModernFlowType>0</ModernFlowType>
       <PrimaryEntity>none</PrimaryEntity>
       <LocalizedNames>
         <LocalizedName languagecode="1033" description="Warranty Sync - Nightly" />
+      </LocalizedNames>
+    </Workflow>
+    <Workflow WorkflowId="{2d6f8b14-7a3c-4e95-b1d8-5c0e9a4f7b23}" Name="Warranty Sync - Autotask Only">
+      <JsonFileName>/Workflows/WarrantySync-AutotaskOnly-2D6F8B14-7A3C-4E95-B1D8-5C0E9A4F7B23.json</JsonFileName>
+      <Type>1</Type>
+      <Subprocess>0</Subprocess>
+      <Category>5</Category>
+      <Mode>0</Mode>
+      <Scope>4</Scope>
+      <OnDemand>0</OnDemand>
+      <TriggerOnCreate>0</TriggerOnCreate>
+      <TriggerOnDelete>0</TriggerOnDelete>
+      <AsyncAutodelete>0</AsyncAutodelete>
+      <SyncWorkflowLogOnFailure>0</SyncWorkflowLogOnFailure>
+      <StateCode>0</StateCode>
+      <StatusCode>1</StatusCode>
+      <RunAs>1</RunAs>
+      <IsTransacted>1</IsTransacted>
+      <IntroducedVersion>1.0.0.4</IntroducedVersion>
+      <IsCustomizable>1</IsCustomizable>
+      <IsCustomProcessingStepAllowedForOtherPublishers>1</IsCustomProcessingStepAllowedForOtherPublishers>
+      <ModernFlowType>0</ModernFlowType>
+      <PrimaryEntity>none</PrimaryEntity>
+      <LocalizedNames>
+        <LocalizedName languagecode="1033" description="Warranty Sync - Autotask Only" />
       </LocalizedNames>
     </Workflow>
   </Workflows>
