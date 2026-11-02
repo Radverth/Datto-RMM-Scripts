@@ -1,2 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<environmentvariabledefinition schemaname="aits_DattoApiUrl"><introducedversion>1.0</introducedversion><iscustomizable>1</iscustomizable><isrequired>0</isrequired><displayname default="Datto RMM API URL"><label description="Datto RMM API URL" languagecode="1033" /></displayname><description default="https://&lt;platform&gt;-api.centrastage.net"><label description="https://&lt;platform&gt;-api.centrastage.net" languagecode="1033" /></description><type>100000000</type></environmentvariabledefinition>

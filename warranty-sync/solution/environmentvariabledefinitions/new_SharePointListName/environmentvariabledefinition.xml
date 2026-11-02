@@ -1,0 +1,14 @@
+<environmentvariabledefinition schemaname="new_SharePointListName">
+  <defaultvalue>Warranty Sync State</defaultvalue>
+  <description default="List title (or GUID)">
+    <label description="List title (or GUID)" languagecode="1033" />
+  </description>
+  <displayname default="SharePoint list name">
+    <label description="SharePoint list name" languagecode="1033" />
+  </displayname>
+  <introducedversion>1.0.0.0</introducedversion>
+  <iscustomizable>1</iscustomizable>
+  <isrequired>0</isrequired>
+  <secretstore>0</secretstore>
+  <type>100000000</type>
+</environmentvariabledefinition>

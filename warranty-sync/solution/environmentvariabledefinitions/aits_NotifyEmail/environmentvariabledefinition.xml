@@ -1,2 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<environmentvariabledefinition schemaname="aits_NotifyEmail"><introducedversion>1.0</introducedversion><iscustomizable>1</iscustomizable><isrequired>1</isrequired><displayname default="Summary email recipient"><label description="Summary email recipient" languagecode="1033" /></displayname><description default="Where the nightly summary is sent"><label description="Where the nightly summary is sent" languagecode="1033" /></description><type>100000000</type></environmentvariabledefinition>

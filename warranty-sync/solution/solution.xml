@@ -1,2 +1,86 @@
-<?xml version="1.0" encoding="utf-8"?>
-<ImportExportXml version="9.2.24101.00172" SolutionPackageVersion="9.2" languagecode="1033" generatedBy="CrmLive" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" OrganizationVersion="9.2.24101.00172" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.24101.00172"><SolutionManifest><UniqueName>WarrantySync</UniqueName><LocalizedNames><LocalizedName description="Warranty Sync" languagecode="1033" /></LocalizedNames><Descriptions /><Version>1.0.0.0</Version><Managed>0</Managed><Publisher><UniqueName>affinityit</UniqueName><LocalizedNames><LocalizedName description="Affinity IT Services" languagecode="1033" /></LocalizedNames><Descriptions /><EMailAddress xsi:nil="true"></EMailAddress><SupportingWebsiteUrl xsi:nil="true"></SupportingWebsiteUrl><CustomizationPrefix>aits</CustomizationPrefix><CustomizationOptionValuePrefix>10000</CustomizationOptionValuePrefix><Addresses><Address><AddressNumber>1</AddressNumber><AddressTypeCode>1</AddressTypeCode><City xsi:nil="true"></City><County xsi:nil="true"></County><Country xsi:nil="true"></Country><Fax xsi:nil="true"></Fax><FreightTermsCode xsi:nil="true"></FreightTermsCode><ImportSequenceNumber xsi:nil="true"></ImportSequenceNumber><Latitude xsi:nil="true"></Latitude><Line1 xsi:nil="true"></Line1><Line2 xsi:nil="true"></Line2><Line3 xsi:nil="true"></Line3><Longitude xsi:nil="true"></Longitude><Name xsi:nil="true"></Name><PostalCode xsi:nil="true"></PostalCode><PostOfficeBox xsi:nil="true"></PostOfficeBox><PrimaryContactName xsi:nil="true"></PrimaryContactName><ShippingMethodCode>1</ShippingMethodCode><StateOrProvince xsi:nil="true"></StateOrProvince><Telephone1 xsi:nil="true"></Telephone1><Telephone2 xsi:nil="true"></Telephone2><Telephone3 xsi:nil="true"></Telephone3><TimeZoneRuleVersionNumber xsi:nil="true"></TimeZoneRuleVersionNumber><UPSZone xsi:nil="true"></UPSZone><UTCOffset xsi:nil="true"></UTCOffset><UTCConversionTimeZoneCode xsi:nil="true"></UTCConversionTimeZoneCode></Address><Address><AddressNumber>2</AddressNumber><AddressTypeCode>1</AddressTypeCode><City xsi:nil="true"></City><County xsi:nil="true"></County><Country xsi:nil="true"></Country><Fax xsi:nil="true"></Fax><FreightTermsCode xsi:nil="true"></FreightTermsCode><ImportSequenceNumber xsi:nil="true"></ImportSequenceNumber><Latitude xsi:nil="true"></Latitude><Line1 xsi:nil="true"></Line1><Line2 xsi:nil="true"></Line2><Line3 xsi:nil="true"></Line3><Longitude xsi:nil="true"></Longitude><Name xsi:nil="true"></Name><PostalCode xsi:nil="true"></PostalCode><PostOfficeBox xsi:nil="true"></PostOfficeBox><PrimaryContactName xsi:nil="true"></PrimaryContactName><ShippingMethodCode>1</ShippingMethodCode><StateOrProvince xsi:nil="true"></StateOrProvince><Telephone1 xsi:nil="true"></Telephone1><Telephone2 xsi:nil="true"></Telephone2><Telephone3 xsi:nil="true"></Telephone3><TimeZoneRuleVersionNumber xsi:nil="true"></TimeZoneRuleVersionNumber><UPSZone xsi:nil="true"></UPSZone><UTCOffset xsi:nil="true"></UTCOffset><UTCConversionTimeZoneCode xsi:nil="true"></UTCConversionTimeZoneCode></Address></Addresses></Publisher><RootComponents><RootComponent type="29" id="{7b1d3a52-4c6e-4f0a-9a37-2d5e8c1f0b64}" behavior="0" /><RootComponent type="380" schemaName="aits_DryRun" behavior="0" /><RootComponent type="380" schemaName="aits_LaptopTypeId" behavior="0" /><RootComponent type="380" schemaName="aits_DesktopTypeId" behavior="0" /><RootComponent type="380" schemaName="aits_ActiveStatusId" behavior="0" /><RootComponent type="380" schemaName="aits_MyITPAttribute" behavior="0" /><RootComponent type="380" schemaName="aits_MaxWritesPerRun" behavior="0" /><RootComponent type="380" schemaName="aits_WriteAutotask" behavior="0" /><RootComponent type="380" schemaName="aits_ITGlueBaseUri" behavior="0" /><RootComponent type="380" schemaName="aits_ITGlueApiKey" behavior="0" /><RootComponent type="380" schemaName="aits_DattoApiUrl" behavior="0" /><RootComponent type="380" schemaName="aits_DattoApiKey" behavior="0" /><RootComponent type="380" schemaName="aits_DattoApiSecret" behavior="0" /><RootComponent type="380" schemaName="aits_AutotaskBaseUri" behavior="0" /><RootComponent type="380" schemaName="aits_AutotaskUsername" behavior="0" /><RootComponent type="380" schemaName="aits_AutotaskSecret" behavior="0" /><RootComponent type="380" schemaName="aits_AutotaskIntegrationCode" behavior="0" /><RootComponent type="380" schemaName="aits_SharePointSiteUrl" behavior="0" /><RootComponent type="380" schemaName="aits_SharePointListName" behavior="0" /><RootComponent type="380" schemaName="aits_NotifyEmail" behavior="0" /><RootComponent type="372" schemaName="aits_sharedsharepointonline" behavior="0" /><RootComponent type="372" schemaName="aits_sharedoffice365" behavior="0" /></RootComponents><MissingDependencies /></SolutionManifest></ImportExportXml>
+<ImportExportXml version="9.2.26102.127" SolutionPackageVersion="9.2" languagecode="1033" generatedBy="CrmLive" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" OrganizationVersion="9.2.26102.127" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26102.00127">
+  <SolutionManifest>
+    <UniqueName>WarrantySync</UniqueName>
+    <LocalizedNames>
+      <LocalizedName description="Warranty Sync" languagecode="1033" />
+    </LocalizedNames>
+    <Descriptions />
+    <Version>1.0.0.0</Version>
+    <Managed>0</Managed>
+    <Publisher>
+      <UniqueName>DefaultPublisherorgda80817a</UniqueName>
+      <LocalizedNames>
+        <LocalizedName description="Default Publisher for orgda80817a" languagecode="1033" />
+      </LocalizedNames>
+      <Descriptions>
+        <Description description="Default publisher for this organization" languagecode="1033" />
+      </Descriptions>
+      <EMailAddress xsi:nil="true"></EMailAddress>
+      <SupportingWebsiteUrl xsi:nil="true"></SupportingWebsiteUrl>
+      <CustomizationPrefix>new</CustomizationPrefix>
+      <CustomizationOptionValuePrefix>10000</CustomizationOptionValuePrefix>
+      <Addresses>
+        <Address>
+          <AddressNumber>1</AddressNumber>
+          <AddressTypeCode xsi:nil="true"></AddressTypeCode>
+          <City xsi:nil="true"></City>
+          <County xsi:nil="true"></County>
+          <Country xsi:nil="true"></Country>
+          <Fax xsi:nil="true"></Fax>
+          <FreightTermsCode xsi:nil="true"></FreightTermsCode>
+          <ImportSequenceNumber xsi:nil="true"></ImportSequenceNumber>
+          <Latitude xsi:nil="true"></Latitude>
+          <Line1 xsi:nil="true"></Line1>
+          <Line2 xsi:nil="true"></Line2>
+          <Line3 xsi:nil="true"></Line3>
+          <Longitude xsi:nil="true"></Longitude>
+          <Name xsi:nil="true"></Name>
+          <PostalCode xsi:nil="true"></PostalCode>
+          <PostOfficeBox xsi:nil="true"></PostOfficeBox>
+          <PrimaryContactName xsi:nil="true"></PrimaryContactName>
+          <ShippingMethodCode xsi:nil="true"></ShippingMethodCode>
+          <StateOrProvince xsi:nil="true"></StateOrProvince>
+          <Telephone1 xsi:nil="true"></Telephone1>
+          <Telephone2 xsi:nil="true"></Telephone2>
+          <Telephone3 xsi:nil="true"></Telephone3>
+          <TimeZoneRuleVersionNumber xsi:nil="true"></TimeZoneRuleVersionNumber>
+          <UPSZone xsi:nil="true"></UPSZone>
+          <UTCOffset xsi:nil="true"></UTCOffset>
+          <UTCConversionTimeZoneCode xsi:nil="true"></UTCConversionTimeZoneCode>
+        </Address>
+        <Address>
+          <AddressNumber>2</AddressNumber>
+          <AddressTypeCode xsi:nil="true"></AddressTypeCode>
+          <City xsi:nil="true"></City>
+          <County xsi:nil="true"></County>
+          <Country xsi:nil="true"></Country>
+          <Fax xsi:nil="true"></Fax>
+          <FreightTermsCode xsi:nil="true"></FreightTermsCode>
+          <ImportSequenceNumber xsi:nil="true"></ImportSequenceNumber>
+          <Latitude xsi:nil="true"></Latitude>
+          <Line1 xsi:nil="true"></Line1>
+          <Line2 xsi:nil="true"></Line2>
+          <Line3 xsi:nil="true"></Line3>
+          <Longitude xsi:nil="true"></Longitude>
+          <Name xsi:nil="true"></Name>
+          <PostalCode xsi:nil="true"></PostalCode>
+          <PostOfficeBox xsi:nil="true"></PostOfficeBox>
+          <PrimaryContactName xsi:nil="true"></PrimaryContactName>
+          <ShippingMethodCode xsi:nil="true"></ShippingMethodCode>
+          <StateOrProvince xsi:nil="true"></StateOrProvince>
+          <Telephone1 xsi:nil="true"></Telephone1>
+          <Telephone2 xsi:nil="true"></Telephone2>
+          <Telephone3 xsi:nil="true"></Telephone3>
+          <TimeZoneRuleVersionNumber xsi:nil="true"></TimeZoneRuleVersionNumber>
+          <UPSZone xsi:nil="true"></UPSZone>
+          <UTCOffset xsi:nil="true"></UTCOffset>
+          <UTCConversionTimeZoneCode xsi:nil="true"></UTCConversionTimeZoneCode>
+        </Address>
+      </Addresses>
+    </Publisher>
+    <RootComponents>
+      <RootComponent type="29" id="{7b1d3a52-4c6e-4f0a-9a37-2d5e8c1f0b64}" behavior="0" />
+    </RootComponents>
+    <MissingDependencies />
+  </SolutionManifest>
+</ImportExportXml>

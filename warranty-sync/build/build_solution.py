@@ -12,7 +12,7 @@ OUT = os.path.dirname(HERE)
 SRC = os.path.join(OUT, "solution")
 ZIP = os.path.join(OUT, "WarrantySync_1_0_0_0.zip")
 
-PREFIX = "aits"
+PREFIX = "new"  # matches the environment default publisher (see PUBLISHER below)
 WF_ID = "7b1d3a52-4c6e-4f0a-9a37-2d5e8c1f0b64"
 FLOW_NAME = "Warranty Sync - Nightly"
 
@@ -241,9 +241,9 @@ for k, (disp, dflt, _, _) in ENV.items():
 
 flow = {"properties": {
     "connectionReferences": {
-        "shared_sharepointonline": {"runtimeSource": "embedded", "connection": {"connectionReferenceLogicalName": PREFIX + "_sharedsharepointonline"},
+        "shared_sharepointonline": {"runtimeSource": "embedded", "connection": {"connectionReferenceLogicalName": PREFIX + "_sharedsharepointonline_wsync"},
                                     "api": {"name": "shared_sharepointonline"}},
-        "shared_office365": {"runtimeSource": "embedded", "connection": {"connectionReferenceLogicalName": PREFIX + "_sharedoffice365"},
+        "shared_office365": {"runtimeSource": "embedded", "connection": {"connectionReferenceLogicalName": PREFIX + "_sharedoffice365_wsync"},
                              "api": {"name": "shared_office365"}}},
     "definition": {"$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
                    "contentVersion": "1.0.0.0", "parameters": params,
@@ -254,60 +254,93 @@ flow = {"properties": {
     "templateName": None}, "schemaVersion": "1.0.0.0"}
 
 # ---- solution files ---------------------------------------------------------------------------
-def lbl(tag, text, extra=""):
-    return '<%s default=%s><label description=%s languagecode="1033" /></%s>' % (tag, quoteattr(text), quoteattr(text), tag)
+# Layout, element order, CRLF endings and the publisher mirror a solution exported from the target
+# environment (AutotaskaBillitySync_1_0_0_13.zip), which is known to import.
+ORGVER = 'OrganizationVersion="9.2.26102.127" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26102.00127"'
+PUBLISHER = ("DefaultPublisherorgda80817a", "Default Publisher for orgda80817a", "Default publisher for this organization")
+VERSION = "1.0.0.0"
 
-def write(path, text):
+def write(path, text, bom=False):
     full = os.path.join(SRC, path); os.makedirs(os.path.dirname(full), exist_ok=True)
-    with open(full, "w", encoding="utf-8", newline="\n") as f: f.write(text)
+    data = text.replace("\r\n", "\n").replace("\n", "\r\n").encode("utf-8")
+    with open(full, "wb") as f: f.write((b"\xef\xbb\xbf" if bom else b"") + data)
+
+def label(tag, text, ind):
+    return ('%s<%s default=%s>\n%s  <label description=%s languagecode="1033" />\n%s</%s>\n'
+            % (ind, tag, quoteattr(text), ind, quoteattr(text), ind, tag))
 
 shutil.rmtree(SRC, ignore_errors=True)
-guid_u = WF_ID.upper()
-wf_file = "/Workflows/WarrantySyncNightly-%s.json" % guid_u
+wf_file = "/Workflows/WarrantySync-Nightly-%s.json" % WF_ID.upper()
 write(wf_file.lstrip("/"), json.dumps(flow, indent=2, ensure_ascii=False))
-write("[Content_Types].xml", '<?xml version="1.0" encoding="utf-8"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-      '<Default Extension="xml" ContentType="application/octet-stream" /><Default Extension="json" ContentType="application/octet-stream" /></Types>')
+write("[Content_Types].xml", '<?xml version="1.0" encoding="utf-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+      '<Default Extension="xml" ContentType="application/octet-stream" /><Default Extension="json" ContentType="application/octet-stream" /></Types>', bom=True)
 
-roots = ['<RootComponent type="29" id="{%s}" behavior="0" />' % WF_ID]
-for k in ENV: roots.append('<RootComponent type="380" schemaName="%s_%s" behavior="0" />' % (PREFIX, k))
-for c in ("sharedsharepointonline", "sharedoffice365"): roots.append('<RootComponent type="372" schemaName="%s_%s" behavior="0" />' % (PREFIX, c))
-write("solution.xml", '<?xml version="1.0" encoding="utf-8"?>\n<ImportExportXml version="9.2.24101.00172" SolutionPackageVersion="9.2" languagecode="1033" generatedBy="CrmLive" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" OrganizationVersion="9.2.24101.00172" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.24101.00172">'
-      '<SolutionManifest><UniqueName>WarrantySync</UniqueName><LocalizedNames><LocalizedName description="Warranty Sync" languagecode="1033" /></LocalizedNames><Descriptions />'
-      '<Version>1.0.0.0</Version><Managed>0</Managed><Publisher><UniqueName>affinityit</UniqueName><LocalizedNames><LocalizedName description="Affinity IT Services" languagecode="1033" /></LocalizedNames><Descriptions />'
-      '<EMailAddress xsi:nil="true"></EMailAddress><SupportingWebsiteUrl xsi:nil="true"></SupportingWebsiteUrl><CustomizationPrefix>%s</CustomizationPrefix><CustomizationOptionValuePrefix>10000</CustomizationOptionValuePrefix><Addresses><Address><AddressNumber>1</AddressNumber><AddressTypeCode>1</AddressTypeCode><City xsi:nil="true"></City><County xsi:nil="true"></County><Country xsi:nil="true"></Country><Fax xsi:nil="true"></Fax><FreightTermsCode xsi:nil="true"></FreightTermsCode><ImportSequenceNumber xsi:nil="true"></ImportSequenceNumber><Latitude xsi:nil="true"></Latitude><Line1 xsi:nil="true"></Line1><Line2 xsi:nil="true"></Line2><Line3 xsi:nil="true"></Line3><Longitude xsi:nil="true"></Longitude><Name xsi:nil="true"></Name><PostalCode xsi:nil="true"></PostalCode><PostOfficeBox xsi:nil="true"></PostOfficeBox><PrimaryContactName xsi:nil="true"></PrimaryContactName><ShippingMethodCode>1</ShippingMethodCode><StateOrProvince xsi:nil="true"></StateOrProvince><Telephone1 xsi:nil="true"></Telephone1><Telephone2 xsi:nil="true"></Telephone2><Telephone3 xsi:nil="true"></Telephone3><TimeZoneRuleVersionNumber xsi:nil="true"></TimeZoneRuleVersionNumber><UPSZone xsi:nil="true"></UPSZone><UTCOffset xsi:nil="true"></UTCOffset><UTCConversionTimeZoneCode xsi:nil="true"></UTCConversionTimeZoneCode></Address><Address><AddressNumber>2</AddressNumber><AddressTypeCode>1</AddressTypeCode><City xsi:nil="true"></City><County xsi:nil="true"></County><Country xsi:nil="true"></Country><Fax xsi:nil="true"></Fax><FreightTermsCode xsi:nil="true"></FreightTermsCode><ImportSequenceNumber xsi:nil="true"></ImportSequenceNumber><Latitude xsi:nil="true"></Latitude><Line1 xsi:nil="true"></Line1><Line2 xsi:nil="true"></Line2><Line3 xsi:nil="true"></Line3><Longitude xsi:nil="true"></Longitude><Name xsi:nil="true"></Name><PostalCode xsi:nil="true"></PostalCode><PostOfficeBox xsi:nil="true"></PostOfficeBox><PrimaryContactName xsi:nil="true"></PrimaryContactName><ShippingMethodCode>1</ShippingMethodCode><StateOrProvince xsi:nil="true"></StateOrProvince><Telephone1 xsi:nil="true"></Telephone1><Telephone2 xsi:nil="true"></Telephone2><Telephone3 xsi:nil="true"></Telephone3><TimeZoneRuleVersionNumber xsi:nil="true"></TimeZoneRuleVersionNumber><UPSZone xsi:nil="true"></UPSZone><UTCOffset xsi:nil="true"></UTCOffset><UTCConversionTimeZoneCode xsi:nil="true"></UTCConversionTimeZoneCode></Address></Addresses></Publisher>'
-      '<RootComponents>%s</RootComponents><MissingDependencies /></SolutionManifest></ImportExportXml>' % (PREFIX, "".join(roots)))
+addr_fields = ["AddressTypeCode", "City", "County", "Country", "Fax", "FreightTermsCode", "ImportSequenceNumber", "Latitude",
+               "Line1", "Line2", "Line3", "Longitude", "Name", "PostalCode", "PostOfficeBox", "PrimaryContactName",
+               "ShippingMethodCode", "StateOrProvince", "Telephone1", "Telephone2", "Telephone3", "TimeZoneRuleVersionNumber",
+               "UPSZone", "UTCOffset", "UTCConversionTimeZoneCode"]
+def address(n):
+    return ("        <Address>\n          <AddressNumber>%d</AddressNumber>\n" % n
+            + "".join('          <%s xsi:nil="true"></%s>\n' % (f, f) for f in addr_fields) + "        </Address>\n")
+
+write("solution.xml",
+ '<ImportExportXml version="9.2.26102.127" SolutionPackageVersion="9.2" languagecode="1033" generatedBy="CrmLive" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" %s>\n' % ORGVER +
+ '  <SolutionManifest>\n    <UniqueName>WarrantySync</UniqueName>\n    <LocalizedNames>\n      <LocalizedName description="Warranty Sync" languagecode="1033" />\n    </LocalizedNames>\n'
+ '    <Descriptions />\n    <Version>%s</Version>\n    <Managed>0</Managed>\n    <Publisher>\n      <UniqueName>%s</UniqueName>\n' % (VERSION, PUBLISHER[0]) +
+ '      <LocalizedNames>\n        <LocalizedName description="%s" languagecode="1033" />\n      </LocalizedNames>\n' % PUBLISHER[1] +
+ '      <Descriptions>\n        <Description description="%s" languagecode="1033" />\n      </Descriptions>\n' % PUBLISHER[2] +
+ '      <EMailAddress xsi:nil="true"></EMailAddress>\n      <SupportingWebsiteUrl xsi:nil="true"></SupportingWebsiteUrl>\n'
+ '      <CustomizationPrefix>%s</CustomizationPrefix>\n      <CustomizationOptionValuePrefix>10000</CustomizationOptionValuePrefix>\n' % PREFIX +
+ '      <Addresses>\n' + address(1) + address(2) + '      </Addresses>\n    </Publisher>\n'
+ '    <RootComponents>\n      <RootComponent type="29" id="{%s}" behavior="0" />\n    </RootComponents>\n' % WF_ID +
+ '    <MissingDependencies />\n  </SolutionManifest>\n</ImportExportXml>')
 
 def connref(logical, disp, api):
-    return ('<connectionreference connectionreferencelogicalname="%s_%s"><connectionreferencedisplayname>%s</connectionreferencedisplayname>'
-            '<connectorid>/providers/Microsoft.PowerApps/apis/%s</connectorid><iscustomizable>1</iscustomizable><promptingbehavior>0</promptingbehavior>'
-            '<statecode>0</statecode><statuscode>1</statuscode></connectionreference>') % (PREFIX, logical, disp, api)
-write("customizations.xml", '<?xml version="1.0" encoding="utf-8"?>\n<ImportExportXml xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
-      '<Entities></Entities><Roles></Roles><Workflows><Workflow WorkflowId="{%s}" Name="%s"><JsonFileName>%s</JsonFileName><Type>1</Type><Subprocess>0</Subprocess>'
-      '<Category>5</Category><Mode>0</Mode><Scope>4</Scope><OnDemand>0</OnDemand><TriggerOnCreate>0</TriggerOnCreate><TriggerOnDelete>0</TriggerOnDelete>'
-      '<AsyncAutodelete>0</AsyncAutodelete><SyncWorkflowLogOnFailure>0</SyncWorkflowLogOnFailure><StateCode>0</StateCode><StatusCode>1</StatusCode><RunAs>1</RunAs>'
-      '<IsTransacted>1</IsTransacted><IntroducedVersion>1.0.0.0</IntroducedVersion><IsCustomizable>1</IsCustomizable><BusinessProcessType>0</BusinessProcessType>'
-      '<IsCustomProcessingStepAllowedForOtherPublishers>1</IsCustomProcessingStepAllowedForOtherPublishers><PrimaryEntity>none</PrimaryEntity>'
-      '<LocalizedNames><LocalizedName languagecode="1033" description="%s" /></LocalizedNames></Workflow></Workflows>'
-      '<FieldSecurityProfiles></FieldSecurityProfiles><Templates /><EntityMaps /><EntityRelationships /><OrganizationSettings /><optionsets /><CustomControls /><EntityDataProviders />'
-      '<connectionreferences>%s%s</connectionreferences><Languages><Language>1033</Language></Languages></ImportExportXml>' % (
-      WF_ID, FLOW_NAME, wf_file, FLOW_NAME, connref("sharedsharepointonline", "SharePoint", "shared_sharepointonline"),
-      connref("sharedoffice365", "Office 365 Outlook", "shared_office365")))
+    return ('    <connectionreference connectionreferencelogicalname="%s">\n'
+            '      <connectionreferencedisplayname>%s</connectionreferencedisplayname>\n'
+            '      <connectorid>/providers/Microsoft.PowerApps/apis/%s</connectorid>\n'
+            '      <iscustomizable>1</iscustomizable>\n      <promptingbehavior>0</promptingbehavior>\n'
+            '      <statecode>0</statecode>\n      <statuscode>1</statuscode>\n    </connectionreference>\n') % (logical, escape(disp), api)
 
+write("customizations.xml",
+ '<ImportExportXml xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" %s>\n' % ORGVER +
+ '  <Entities></Entities>\n  <Roles></Roles>\n  <Workflows>\n'
+ '    <Workflow WorkflowId="{%s}" Name=%s>\n' % (WF_ID, quoteattr(FLOW_NAME)) +
+ '      <JsonFileName>%s</JsonFileName>\n' % wf_file +
+ '      <Type>1</Type>\n      <Subprocess>0</Subprocess>\n      <Category>5</Category>\n      <Mode>0</Mode>\n      <Scope>4</Scope>\n'
+ '      <OnDemand>0</OnDemand>\n      <TriggerOnCreate>0</TriggerOnCreate>\n      <TriggerOnDelete>0</TriggerOnDelete>\n'
+ '      <AsyncAutodelete>0</AsyncAutodelete>\n      <SyncWorkflowLogOnFailure>0</SyncWorkflowLogOnFailure>\n'
+ '      <StateCode>0</StateCode>\n      <StatusCode>1</StatusCode>\n      <RunAs>1</RunAs>\n      <IsTransacted>1</IsTransacted>\n'
+ '      <IntroducedVersion>%s</IntroducedVersion>\n      <IsCustomizable>1</IsCustomizable>\n' % VERSION +
+ '      <IsCustomProcessingStepAllowedForOtherPublishers>1</IsCustomProcessingStepAllowedForOtherPublishers>\n'
+ '      <ModernFlowType>0</ModernFlowType>\n      <PrimaryEntity>none</PrimaryEntity>\n'
+ '      <LocalizedNames>\n        <LocalizedName languagecode="1033" description=%s />\n      </LocalizedNames>\n' % quoteattr(FLOW_NAME) +
+ '    </Workflow>\n  </Workflows>\n  <FieldSecurityProfiles></FieldSecurityProfiles>\n  <Templates />\n  <EntityMaps />\n'
+ '  <EntityRelationships />\n  <OrganizationSettings />\n  <optionsets />\n  <CustomControls />\n  <EntityDataProviders />\n'
+ '  <connectionreferences>\n' +
+ connref(PREFIX + "_sharedoffice365_wsync", "Office 365 Outlook (Warranty Sync)", "shared_office365") +
+ connref(PREFIX + "_sharedsharepointonline_wsync", "SharePoint (Warranty Sync State)", "shared_sharepointonline") +
+ '  </connectionreferences>\n  <Languages>\n    <Language>1033</Language>\n  </Languages>\n</ImportExportXml>')
+
+# env var definitions: children in alphabetical order, as exported
 for k, (disp, dflt, req, desc) in ENV.items():
-    write("environmentvariabledefinitions/%s_%s/environmentvariabledefinition.xml" % (PREFIX, k),
-          '<?xml version="1.0" encoding="utf-8"?>\n<environmentvariabledefinition schemaname="%s_%s">%s<introducedversion>1.0</introducedversion>'
-          '<iscustomizable>1</iscustomizable><isrequired>%d</isrequired>%s%s<type>100000000</type></environmentvariabledefinition>' % (
-          PREFIX, k, ("<defaultvalue>%s</defaultvalue>" % escape(dflt)) if dflt else "", 1 if req else 0,
-          lbl("displayname", disp), lbl("description", desc or disp)))
+    x = '<environmentvariabledefinition schemaname="%s_%s">\n' % (PREFIX, k)
+    if dflt: x += '  <defaultvalue>%s</defaultvalue>\n' % escape(dflt)
+    if desc: x += label("description", desc, "  ")
+    x += label("displayname", disp, "  ")
+    x += ('  <introducedversion>%s</introducedversion>\n  <iscustomizable>1</iscustomizable>\n  <isrequired>%d</isrequired>\n'
+          '  <secretstore>0</secretstore>\n  <type>100000000</type>\n</environmentvariabledefinition>' % (VERSION, 1 if req else 0))
+    write("environmentvariabledefinitions/%s_%s/environmentvariabledefinition.xml" % (PREFIX, k), x)
 
 if os.path.exists(ZIP): os.remove(ZIP)
 names = []
 for root, _, files in os.walk(SRC):
     for f in files:
         names.append(os.path.relpath(os.path.join(root, f), SRC).replace(os.sep, "/"))
-# [Content_Types].xml first, then solution.xml, customizations.xml, rest sorted (matches a real export)
-first = ["[Content_Types].xml", "solution.xml", "customizations.xml"]
-names = first + sorted(n for n in names if n not in first)
+first = ["customizations.xml", "solution.xml"]
+last = ["[Content_Types].xml"]
+names = first + sorted(n for n in names if n.startswith("Workflows/")) + \
+        sorted(n for n in names if n.startswith("environmentvariabledefinitions/")) + last
 with zipfile.ZipFile(ZIP, "w", zipfile.ZIP_DEFLATED) as z:
     for n in names:
         zi = zipfile.ZipInfo(n, date_time=(2026, 11, 2, 0, 0, 0)); zi.compress_type = zipfile.ZIP_DEFLATED

@@ -1,2 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<environmentvariabledefinition schemaname="aits_ITGlueBaseUri"><defaultvalue>https://api.itglue.com</defaultvalue><introducedversion>1.0</introducedversion><iscustomizable>1</iscustomizable><isrequired>0</isrequired><displayname default="IT Glue base URI"><label description="IT Glue base URI" languagecode="1033" /></displayname><description default="e.g. https://api.eu.itglue.com for EU"><label description="e.g. https://api.eu.itglue.com for EU" languagecode="1033" /></description><type>100000000</type></environmentvariabledefinition>

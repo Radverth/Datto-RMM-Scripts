@@ -1,0 +1,14 @@
+<environmentvariabledefinition schemaname="new_MaxWritesPerRun">
+  <defaultvalue>1500</defaultvalue>
+  <description default="Cap on devices written per night">
+    <label description="Cap on devices written per night" languagecode="1033" />
+  </description>
+  <displayname default="Max writes per run">
+    <label description="Max writes per run" languagecode="1033" />
+  </displayname>
+  <introducedversion>1.0.0.0</introducedversion>
+  <iscustomizable>1</iscustomizable>
+  <isrequired>0</isrequired>
+  <secretstore>0</secretstore>
+  <type>100000000</type>
+</environmentvariabledefinition>

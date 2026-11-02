@@ -1,0 +1,14 @@
+<environmentvariabledefinition schemaname="new_WriteAutotask">
+  <defaultvalue>true</defaultvalue>
+  <description default="true/false">
+    <label description="true/false" languagecode="1033" />
+  </description>
+  <displayname default="Write Autotask">
+    <label description="Write Autotask" languagecode="1033" />
+  </displayname>
+  <introducedversion>1.0.0.0</introducedversion>
+  <iscustomizable>1</iscustomizable>
+  <isrequired>0</isrequired>
+  <secretstore>0</secretstore>
+  <type>100000000</type>
+</environmentvariabledefinition>

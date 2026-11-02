@@ -1,0 +1,13 @@
+<environmentvariabledefinition schemaname="new_DesktopTypeId">
+  <description default="GET /configuration_types">
+    <label description="GET /configuration_types" languagecode="1033" />
+  </description>
+  <displayname default="IT Glue Desktop type ID">
+    <label description="IT Glue Desktop type ID" languagecode="1033" />
+  </displayname>
+  <introducedversion>1.0.0.0</introducedversion>
+  <iscustomizable>1</iscustomizable>
+  <isrequired>1</isrequired>
+  <secretstore>0</secretstore>
+  <type>100000000</type>
+</environmentvariabledefinition>

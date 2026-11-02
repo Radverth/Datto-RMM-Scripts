@@ -1,2 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<environmentvariabledefinition schemaname="aits_ITGlueApiKey"><introducedversion>1.0</introducedversion><iscustomizable>1</iscustomizable><isrequired>1</isrequired><displayname default="IT Glue API key"><label description="IT Glue API key" languagecode="1033" /></displayname><description default="Needs read + write on Configurations"><label description="Needs read + write on Configurations" languagecode="1033" /></description><type>100000000</type></environmentvariabledefinition>
