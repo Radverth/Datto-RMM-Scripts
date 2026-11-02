@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the importable Power Automate solution (WarrantySync_1_0_0_9.zip).
+"""Generate the importable Power Automate solution (WarrantySync_1_0_0_10.zip).
 
 Run:  python3 warranty-sync/build/build_solution.py
 Writes the unpacked source to warranty-sync/solution/ and the zip to warranty-sync/.
@@ -10,7 +10,7 @@ from xml.sax.saxutils import escape, quoteattr
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.dirname(HERE)
 SRC = os.path.join(OUT, "solution")
-ZIP = os.path.join(OUT, "WarrantySync_1_0_0_9.zip")
+ZIP = os.path.join(OUT, "WarrantySync_1_0_0_10.zip")
 
 PREFIX = "new"  # matches the environment default publisher (see PUBLISHER below)
 WF_ID = "7b1d3a52-4c6e-4f0a-9a37-2d5e8c1f0b64"
@@ -287,6 +287,10 @@ summary_body = ("<p>Warranty Sync finished (@{if(%s, 'LIVE', 'DRY RUN')}).</p><u
     "<li>Changes pending: @{length(body('Filter_ToPush'))}</li>"
     "<li>Processed tonight: @{length(outputs('Compose_Batch'))}</li>"
     "<li>Errors tonight: @{length(body('Filter_Errors'))}</li></ul>"
+    "@{if(greaterOrEquals(length(body('Get_State_items')?['value']), 5000), "
+    "'<p><b>Warning: the Warranty Sync State list has 5,000 or more rows, the most this flow can read. "
+    "Devices beyond that are treated as never pushed and are written again every night. Ask for the state "
+    "lookup to be split before the list grows further.</b></p>', '')}"
     "<p><a href=\"@{%s}/Lists/WarrantySyncState/Needs%%20attention.aspx\">Needs attention view</a></p>") % (live, site)
 
 actions = {
@@ -323,7 +327,8 @@ actions = {
         "authentication": "@parameters('$authentication')"}, "runAfter": {}},
 }
 for n in ("Get_State_items", "Get_run_rows"):
-    actions[n]["runtimeConfiguration"] = {"paginationPolicy": {"minimumItemCount": 100000}}
+    # 5,000 is the most SharePoint "Get items" will page to on this licence
+    actions[n]["runtimeConfiguration"] = {"paginationPolicy": {"minimumItemCount": 5000}}
 # top-level chain. Foreach_Batch / summary run regardless of per-device failures.
 order = ["Init_RunStart", "Init_Devices", "Init_Page", "Init_PageCount", "Init_DattoToken", "Compose_TypeIds",
          "If_live_get_token", "Foreach_Type", "Select_Decided", "Get_State_items", "Select_State", "StateString",
@@ -587,7 +592,7 @@ FLOWS = [
 # environment (AutotaskaBillitySync_1_0_0_13.zip), which is known to import.
 ORGVER = 'OrganizationVersion="9.2.26102.127" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26102.00127"'
 PUBLISHER = ("DefaultPublisherorgda80817a", "Default Publisher for orgda80817a", "Default publisher for this organization")
-VERSION = "1.0.0.9"
+VERSION = "1.0.0.10"
 
 def write(path, text, bom=False):
     full = os.path.join(SRC, path); os.makedirs(os.path.dirname(full), exist_ok=True)

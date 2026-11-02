@@ -469,7 +469,7 @@
           },
           "runtimeConfiguration": {
             "paginationPolicy": {
-              "minimumItemCount": 100000
+              "minimumItemCount": 5000
             }
           }
         },
@@ -855,7 +855,7 @@
           },
           "runtimeConfiguration": {
             "paginationPolicy": {
-              "minimumItemCount": 100000
+              "minimumItemCount": 5000
             }
           }
         },
@@ -885,7 +885,7 @@
             "parameters": {
               "emailMessage/To": "@parameters('Summary email recipient (new_NotifyEmail)')",
               "emailMessage/Subject": "Warranty Sync summary",
-              "emailMessage/Body": "<p>Warranty Sync finished (@{if(contains(createArray('false', 'no'), toLower(string(parameters('Dry run (new_DryRun)')))), 'LIVE', 'DRY RUN')}).</p><ul><li>Devices read from IT Glue: @{length(body('Select_Decided'))}</li><li>Changes pending: @{length(body('Filter_ToPush'))}</li><li>Processed tonight: @{length(outputs('Compose_Batch'))}</li><li>Errors tonight: @{length(body('Filter_Errors'))}</li></ul><p><a href=\"@{parameters('SharePoint site URL (new_SharePointSiteUrl)')}/Lists/WarrantySyncState/Needs%20attention.aspx\">Needs attention view</a></p>",
+              "emailMessage/Body": "<p>Warranty Sync finished (@{if(contains(createArray('false', 'no'), toLower(string(parameters('Dry run (new_DryRun)')))), 'LIVE', 'DRY RUN')}).</p><ul><li>Devices read from IT Glue: @{length(body('Select_Decided'))}</li><li>Changes pending: @{length(body('Filter_ToPush'))}</li><li>Processed tonight: @{length(outputs('Compose_Batch'))}</li><li>Errors tonight: @{length(body('Filter_Errors'))}</li></ul>@{if(greaterOrEquals(length(body('Get_State_items')?['value']), 5000), '<p><b>Warning: the Warranty Sync State list has 5,000 or more rows, the most this flow can read. Devices beyond that are treated as never pushed and are written again every night. Ask for the state lookup to be split before the list grows further.</b></p>', '')}<p><a href=\"@{parameters('SharePoint site URL (new_SharePointSiteUrl)')}/Lists/WarrantySyncState/Needs%20attention.aspx\">Needs attention view</a></p>",
               "emailMessage/Importance": "Normal"
             },
             "authentication": "@parameters('$authentication')"
