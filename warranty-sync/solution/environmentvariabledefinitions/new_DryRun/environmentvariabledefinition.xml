@@ -1,14 +1,14 @@
 <environmentvariabledefinition schemaname="new_DryRun">
-  <defaultvalue>true</defaultvalue>
-  <description default="true = record what would change but write nothing. Set to false to go live.">
-    <label description="true = record what would change but write nothing. Set to false to go live." languagecode="1033" />
+  <defaultvalue>yes</defaultvalue>
+  <description default="Yes = record what would change but write nothing. Set to No to go live.">
+    <label description="Yes = record what would change but write nothing. Set to No to go live." languagecode="1033" />
   </description>
   <displayname default="Dry run">
     <label description="Dry run" languagecode="1033" />
   </displayname>
-  <introducedversion>1.0.0.5</introducedversion>
+  <introducedversion>1.0.0.6</introducedversion>
   <iscustomizable>1</iscustomizable>
   <isrequired>0</isrequired>
   <secretstore>0</secretstore>
-  <type>100000000</type>
+  <type>100000002</type>
 </environmentvariabledefinition>

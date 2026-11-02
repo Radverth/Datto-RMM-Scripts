@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the importable Power Automate solution (WarrantySync_1_0_0_5.zip).
+"""Generate the importable Power Automate solution (WarrantySync_1_0_0_6.zip).
 
 Run:  python3 warranty-sync/build/build_solution.py
 Writes the unpacked source to warranty-sync/solution/ and the zip to warranty-sync/.
@@ -10,7 +10,7 @@ from xml.sax.saxutils import escape, quoteattr
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.dirname(HERE)
 SRC = os.path.join(OUT, "solution")
-ZIP = os.path.join(OUT, "WarrantySync_1_0_0_5.zip")
+ZIP = os.path.join(OUT, "WarrantySync_1_0_0_6.zip")
 
 PREFIX = "new"  # matches the environment default publisher (see PUBLISHER below)
 WF_ID = "7b1d3a52-4c6e-4f0a-9a37-2d5e8c1f0b64"
@@ -18,17 +18,25 @@ FLOW_NAME = "Warranty Sync - Nightly"
 
 # ---- environment variables: key -> (display, default, required, description) ------------------
 ENV = {
- "DryRun": ("Dry run", "true", False, "true = record what would change but write nothing. Set to false to go live."),
+ "DryRun": ("Dry run", "yes", False, "Yes = record what would change but write nothing. Set to No to go live."),
  "LaptopTypeId": ("IT Glue Laptop type ID", None, True, "GET /configuration_types"),
  "DesktopTypeId": ("IT Glue Desktop type ID", None, True, "GET /configuration_types"),
  "ActiveStatusId": ("IT Glue Active status ID", None, True, "GET /configuration_statuses"),
  "MyITPAttribute": ("myITProcess attribute name", None, True, "Exact IT Glue configuration attribute holding the myITProcess warranty date"),
  "MaxWritesPerRun": ("Max writes per run", "1500", False, "Cap on devices written per night"),
- "WriteAutotask": ("Write Autotask", "true", False, "true/false"),
+ "WriteAutotask": ("Write Autotask", "yes", False, "Yes = the nightly flow also writes Autotask."),
  "SharePointSiteUrl": ("SharePoint site URL", None, True, "Site holding the Warranty Sync State list"),
  "SharePointListName": ("SharePoint list name", "Warranty Sync State", False, "List title (or GUID)"),
  "NotifyEmail": ("Summary email recipient", None, True, "Where the nightly summary is sent"),
 }
+BOOL_ENV = {"DryRun", "WriteAutotask"}   # Yes/No (Boolean) environment variables
+
+def env_param(k):
+    disp, dflt = ENV[k][0], ENV[k][1]
+    if k in BOOL_ENV:
+        return {"defaultValue": dflt == "yes", "type": "Bool", "metadata": {"schemaName": "%s_%s" % (PREFIX, k)}}
+    return {"defaultValue": dflt or "", "type": "String", "metadata": {"schemaName": "%s_%s" % (PREFIX, k)}}
+
 def P(key):  # parameter expression fragment
     return "parameters('%s (%s_%s)')" % (ENV[key][0], PREFIX, key)
 
@@ -171,8 +179,8 @@ def chain(actions, order):
     return actions
 
 # ---- the flow ---------------------------------------------------------------------------------
-live = "equals(toLower(%s),'false')" % P("DryRun")
-at_on = "equals(toLower(%s),'true')" % P("WriteAutotask")
+live = "contains(createArray('false', 'no'), toLower(string(%s)))" % P("DryRun")
+at_on = "contains(createArray('true', 'yes'), toLower(string(%s)))" % P("WriteAutotask")
 IT = "items('Foreach_Batch')"
 site, lst = P("SharePointSiteUrl"), P("SharePointListName")
 
@@ -323,8 +331,7 @@ for n in order:
 params = {"$connections": {"defaultValue": {}, "type": "Object"},
           "$authentication": {"defaultValue": {}, "type": "SecureObject"}}
 for k, (disp, dflt, _, _) in ENV.items():
-    params["%s (%s_%s)" % (disp, PREFIX, k)] = {"defaultValue": dflt or "", "type": "String",
-                                                "metadata": {"schemaName": "%s_%s" % (PREFIX, k)}}
+    params["%s (%s_%s)" % (disp, PREFIX, k)] = env_param(k)
 
 flow = {"properties": {
     "connectionReferences": {
@@ -438,8 +445,7 @@ at_params = {"$connections": {"defaultValue": {}, "type": "Object"},
              "$authentication": {"defaultValue": {}, "type": "SecureObject"}}
 for k in AT_ENV:
     disp, dflt = ENV[k][0], ENV[k][1]
-    at_params["%s (%s_%s)" % (disp, PREFIX, k)] = {"defaultValue": dflt or "", "type": "String",
-                                                   "metadata": {"schemaName": "%s_%s" % (PREFIX, k)}}
+    at_params["%s (%s_%s)" % (disp, PREFIX, k)] = env_param(k)
 
 def ref(c): return {"runtimeSource": "embedded", "connection": {"connectionReferenceLogicalName": c["connref"]},
                     "api": {"name": c["api"], "logicalName": c["name"]}}
@@ -472,7 +478,7 @@ FLOWS = [
 # environment (AutotaskaBillitySync_1_0_0_13.zip), which is known to import.
 ORGVER = 'OrganizationVersion="9.2.26102.127" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26102.00127"'
 PUBLISHER = ("DefaultPublisherorgda80817a", "Default Publisher for orgda80817a", "Default publisher for this organization")
-VERSION = "1.0.0.5"
+VERSION = "1.0.0.6"
 
 def write(path, text, bom=False):
     full = os.path.join(SRC, path); os.makedirs(os.path.dirname(full), exist_ok=True)
@@ -579,7 +585,8 @@ for k, (disp, dflt, req, desc) in ENV.items():
     if desc: x += label("description", desc, "  ")
     x += label("displayname", disp, "  ")
     x += ('  <introducedversion>%s</introducedversion>\n  <iscustomizable>1</iscustomizable>\n  <isrequired>%d</isrequired>\n'
-          '  <secretstore>0</secretstore>\n  <type>100000000</type>\n</environmentvariabledefinition>' % (VERSION, 1 if req else 0))
+          '  <secretstore>0</secretstore>\n  <type>%s</type>\n</environmentvariabledefinition>' % (
+          VERSION, 1 if req else 0, "100000002" if k in BOOL_ENV else "100000000"))
     write("environmentvariabledefinitions/%s_%s/environmentvariabledefinition.xml" % (PREFIX, k), x)
 
 if os.path.exists(ZIP): os.remove(ZIP)
