@@ -71,3 +71,7 @@ Notes
 - The package layout mirrors a solution exported from the same environment (publisher `DefaultPublisherorgda80817a`,
   prefix `new`).
 - Status is stored as `Glue later – review` (en dash), matching the list choice created by the script.
+
+## Postman setup lookups
+
+`postman/` has a Postman collection and environment that find the IDs and attribute name the solution needs, and check the plan's step 1 assumptions. See `postman/README.md`.
