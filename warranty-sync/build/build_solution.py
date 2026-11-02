@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the importable Power Automate solution (WarrantySync_1_0_0_4.zip).
+"""Generate the importable Power Automate solution (WarrantySync_1_0_0_5.zip).
 
 Run:  python3 warranty-sync/build/build_solution.py
 Writes the unpacked source to warranty-sync/solution/ and the zip to warranty-sync/.
@@ -10,7 +10,7 @@ from xml.sax.saxutils import escape, quoteattr
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.dirname(HERE)
 SRC = os.path.join(OUT, "solution")
-ZIP = os.path.join(OUT, "WarrantySync_1_0_0_4.zip")
+ZIP = os.path.join(OUT, "WarrantySync_1_0_0_5.zip")
 
 PREFIX = "new"  # matches the environment default publisher (see PUBLISHER below)
 WF_ID = "7b1d3a52-4c6e-4f0a-9a37-2d5e8c1f0b64"
@@ -350,6 +350,12 @@ AT_WF_ID = "2d6f8b14-7a3c-4e95-b1d8-5c0e9a4f7b23"
 AT_FLOW_NAME = "Warranty Sync - Autotask Only"
 AT = "items('Foreach_Device')"
 at_current = "outputs('Compose_Current')"
+# Run-button inputs: Device (blank = all) and WriteNow (write even while Dry run is on)
+at_dev = "outputs('Compose_Device')"
+at_live = "or(%s, equals(triggerBody()?['WriteNow'], true))" % live
+match = ("or(empty(%s), equals(toLower(string(item()?['id'])), %s), equals(toLower(string(item()?['psa'])), %s), "
+         "equals(toLower(trim(string(coalesce(item()?['serial'], '')))), %s), equals(toLower(trim(string(coalesce(item()?['name'], '')))), %s))"
+         ) % (at_dev, at_dev, at_dev, at_dev, at_dev)
 
 def result_row(current, result):
     return {"org": "@%s?['org']" % AT, "device": "@%s?['name']" % AT, "psa": "@%s?['psa']" % AT,
@@ -362,36 +368,47 @@ at_device_actions = {
     "If_differs": {"type": "If", "runAfter": {"Compose_Current": ["Succeeded"]},
         "expression": {"equals": ["@not(equals(%s, %s?['target']))" % (at_current, AT), True]},
         "actions": {
-            "Scope_Write": {"type": "Scope", "runAfter": {}, "actions": {"If_live_write": cond(live, {
+            "Scope_Write": {"type": "Scope", "runAfter": {}, "actions": {"If_live_write": cond(at_live, {
                 "Autotask_update": cc("autotask", "UpdateConfigurationItem", {"body/id": "@int(%s?['psa'])" % AT,
                     "body/warrantyExpirationDate": "@%s?['target']" % AT}, secure=None)})}},
             "Record_change": {"type": "AppendToArrayVariable", "runAfter": {"Scope_Write": ALL},
                 "inputs": {"name": "Results", "value": result_row("@" + at_current,
-                    "@if(%s, 'Error', if(%s, 'Updated', 'Would update'))" % (failed("Scope_Write"), live))}}},
-        "else": {"actions": {}}},
+                    "@if(%s, 'Error', if(%s, 'Updated', 'Would update'))" % (failed("Scope_Write"), at_live))}}},
+        # when one device is targeted, also report that it was already correct
+        "else": {"actions": {"If_targeted": cond("not(empty(%s))" % at_dev, {
+            "Record_unchanged": {"type": "AppendToArrayVariable", "runAfter": {},
+                "inputs": {"name": "Results", "value": result_row("@" + at_current, "Already correct")}}})}}},
     "Record_lookup_error": {"type": "AppendToArrayVariable", "runAfter": {"Get_CI": ["Failed", "TimedOut"]},
         "inputs": {"name": "Results", "value": result_row("", "Autotask lookup failed")}},
 }
 
 at_summary = ("<p>Warranty Sync - Autotask Only finished (@{if(%s, 'LIVE', 'DRY RUN')}).</p><ul>"
+    "<li>Target: @{if(empty(outputs('Compose_Device')), 'all devices', concat('<b>', outputs('Compose_Device'), '</b>'))}</li>"
     "<li>Devices read from IT Glue: @{length(body('Select_Decided'))}</li>"
-    "<li>With a psa-id and a warranty date: @{length(body('Filter_Autotask'))}</li>"
+    "<li>Matching the target: @{length(body('Filter_Target'))}"
+    "@{if(and(not(empty(outputs('Compose_Device'))), equals(length(body('Filter_Target')), 0)), "
+    "' <b>- no active laptop/desktop in IT Glue matches this ID, serial or name</b>', '')}</li>"
+    "<li>With a psa-id and a warranty date: @{length(body('Filter_Autotask'))}"
+    "@{if(and(greater(length(body('Filter_Target')), 0), equals(length(body('Filter_Autotask')), 0)), "
+    "' <b>- the matching device has no psa-id or no warranty date</b>', '')}</li>"
     "<li>Checked this run: @{length(outputs('Compose_Batch'))}</li>"
     "<li>@{if(%s, 'Updated', 'Would update')}: @{length(body('Filter_Changed'))}</li>"
     "<li>Errors: @{length(body('Filter_Failed'))}</li></ul>"
-    "<p>Only devices whose Autotask date differs are listed.</p>@{body('Results_table')}") % (live, live)
+    "<p>Devices whose Autotask date differs are listed (a targeted device is always listed).</p>@{body('Results_table')}") % (at_live, at_live)
 
 at_actions = {
     "Init_Devices": {"type": "InitializeVariable", "inputs": {"variables": [{"name": "Devices", "type": "array", "value": []}]}},
     "Init_Page": {"type": "InitializeVariable", "inputs": {"variables": [{"name": "Page", "type": "integer", "value": 1}]}},
     "Init_PageCount": {"type": "InitializeVariable", "inputs": {"variables": [{"name": "PageCount", "type": "integer", "value": 0}]}},
     "Init_Results": {"type": "InitializeVariable", "inputs": {"variables": [{"name": "Results", "type": "array", "value": []}]}},
+    "Compose_Device": {"type": "Compose", "inputs": "@toLower(trim(string(coalesce(triggerBody()?['Device'], ''))))"},
     "Compose_TypeIds": {"type": "Compose", "inputs": "@createArray(%s, %s)" % (P("LaptopTypeId"), P("DesktopTypeId"))},
     "Foreach_Type": {"type": "Foreach", "foreach": "@outputs('Compose_TypeIds')",
                      "actions": json.loads(json.dumps(foreach_type_actions)),
                      "runtimeConfiguration": {"concurrency": {"repetitions": 1}}},
     "Select_Decided": {"type": "Select", "inputs": {"from": "@variables('Devices')", "select": decided}},
-    "Filter_Autotask": {"type": "Query", "inputs": {"from": "@body('Select_Decided')",
+    "Filter_Target": {"type": "Query", "inputs": {"from": "@body('Select_Decided')", "where": "@" + match}},
+    "Filter_Autotask": {"type": "Query", "inputs": {"from": "@body('Filter_Target')",
                         "where": "@and(not(empty(item()?['target'])), not(empty(item()?['psa'])))"}},
     "Compose_Batch": {"type": "Compose", "inputs": "@take(body('Filter_Autotask'), int(%s))" % P("MaxWritesPerRun")},
     # concurrency 1: Results is appended to from inside the loop
@@ -400,7 +417,7 @@ at_actions = {
     "Filter_Changed": {"type": "Query", "inputs": {"from": "@variables('Results')",
                        "where": "@contains(createArray('Updated', 'Would update'), item()?['result'])"}},
     "Filter_Failed": {"type": "Query", "inputs": {"from": "@variables('Results')",
-                      "where": "@not(contains(createArray('Updated', 'Would update'), item()?['result']))"}},
+                      "where": "@not(contains(createArray('Updated', 'Would update', 'Already correct'), item()?['result']))"}},
     "Results_table": {"type": "Table", "inputs": {"from": "@variables('Results')", "format": "HTML"}},
     "Send_summary": {"type": "OpenApiConnection", "inputs": {
         "host": {"connectionName": "shared_office365", "operationId": "SendEmailV2", "apiId": O365_API},
@@ -408,8 +425,8 @@ at_actions = {
                        "emailMessage/Body": at_summary, "emailMessage/Importance": "Normal"},
         "authentication": "@parameters('$authentication')"}},
 }
-at_order = ["Init_Devices", "Init_Page", "Init_PageCount", "Init_Results", "Compose_TypeIds", "Foreach_Type",
-            "Select_Decided", "Filter_Autotask", "Compose_Batch", "Foreach_Device", "Filter_Changed", "Filter_Failed",
+at_order = ["Init_Devices", "Init_Page", "Init_PageCount", "Init_Results", "Compose_Device", "Compose_TypeIds", "Foreach_Type",
+            "Select_Decided", "Filter_Target", "Filter_Autotask", "Compose_Batch", "Foreach_Device", "Filter_Changed", "Filter_Failed",
             "Results_table", "Send_summary"]
 prev = None
 for n in at_order:
@@ -434,8 +451,14 @@ at_flow = {"properties": {
         CONNECTORS["autotask"]["api"]: ref(CONNECTORS["autotask"])},
     "definition": {"$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
                    "contentVersion": "1.0.0.0", "parameters": at_params,
-                   "triggers": {"manual": {"type": "Request", "kind": "Button",
-                                           "inputs": {"schema": {"type": "object", "properties": {}, "required": []}}}},
+                   "triggers": {"manual": {"type": "Request", "kind": "Button", "inputs": {"schema": {
+                       "type": "object", "required": [], "properties": {
+                           "Device": {"title": "Device (blank = all)", "type": "string", "x-ms-dynamically-added": True,
+                                      "description": "IT Glue configuration ID, Autotask ID (psa-id), serial number or device name. Leave blank for all devices.",
+                                      "x-ms-content-hint": "TEXT"},
+                           "WriteNow": {"title": "Write now (ignore Dry run)", "type": "boolean", "x-ms-dynamically-added": True,
+                                        "description": "Yes = write to Autotask on this run even while the Dry run variable is true.",
+                                        "x-ms-content-hint": "BOOLEAN"}}}}}},
                    "actions": at_actions},
     "templateName": None}, "schemaVersion": "1.0.0.0"}
 
@@ -449,7 +472,7 @@ FLOWS = [
 # environment (AutotaskaBillitySync_1_0_0_13.zip), which is known to import.
 ORGVER = 'OrganizationVersion="9.2.26102.127" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26102.00127"'
 PUBLISHER = ("DefaultPublisherorgda80817a", "Default Publisher for orgda80817a", "Default publisher for this organization")
-VERSION = "1.0.0.4"
+VERSION = "1.0.0.5"
 
 def write(path, text, bom=False):
     full = os.path.join(SRC, path); os.makedirs(os.path.dirname(full), exist_ok=True)

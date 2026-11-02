@@ -5,7 +5,7 @@
   <displayname default="SharePoint site URL">
     <label description="SharePoint site URL" languagecode="1033" />
   </displayname>
-  <introducedversion>1.0.0.4</introducedversion>
+  <introducedversion>1.0.0.5</introducedversion>
   <iscustomizable>1</iscustomizable>
   <isrequired>1</isrequired>
   <secretstore>0</secretstore>

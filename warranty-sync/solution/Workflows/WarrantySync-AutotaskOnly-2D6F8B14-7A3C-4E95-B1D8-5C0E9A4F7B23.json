@@ -100,8 +100,23 @@
           "inputs": {
             "schema": {
               "type": "object",
-              "properties": {},
-              "required": []
+              "required": [],
+              "properties": {
+                "Device": {
+                  "title": "Device (blank = all)",
+                  "type": "string",
+                  "x-ms-dynamically-added": true,
+                  "description": "IT Glue configuration ID, Autotask ID (psa-id), serial number or device name. Leave blank for all devices.",
+                  "x-ms-content-hint": "TEXT"
+                },
+                "WriteNow": {
+                  "title": "Write now (ignore Dry run)",
+                  "type": "boolean",
+                  "x-ms-dynamically-added": true,
+                  "description": "Yes = write to Autotask on this run even while the Dry run variable is true.",
+                  "x-ms-content-hint": "BOOLEAN"
+                }
+              }
             }
           }
         }
@@ -171,11 +186,20 @@
             ]
           }
         },
+        "Compose_Device": {
+          "type": "Compose",
+          "inputs": "@toLower(trim(string(coalesce(triggerBody()?['Device'], ''))))",
+          "runAfter": {
+            "Init_Results": [
+              "Succeeded"
+            ]
+          }
+        },
         "Compose_TypeIds": {
           "type": "Compose",
           "inputs": "@createArray(parameters('IT Glue Laptop type ID (new_LaptopTypeId)'), parameters('IT Glue Desktop type ID (new_DesktopTypeId)'))",
           "runAfter": {
-            "Init_Results": [
+            "Compose_Device": [
               "Succeeded"
             ]
           }
@@ -316,14 +340,26 @@
             ]
           }
         },
-        "Filter_Autotask": {
+        "Filter_Target": {
           "type": "Query",
           "inputs": {
             "from": "@body('Select_Decided')",
-            "where": "@and(not(empty(item()?['target'])), not(empty(item()?['psa'])))"
+            "where": "@or(empty(outputs('Compose_Device')), equals(toLower(string(item()?['id'])), outputs('Compose_Device')), equals(toLower(string(item()?['psa'])), outputs('Compose_Device')), equals(toLower(trim(string(coalesce(item()?['serial'], '')))), outputs('Compose_Device')), equals(toLower(trim(string(coalesce(item()?['name'], '')))), outputs('Compose_Device')))"
           },
           "runAfter": {
             "Select_Decided": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_Autotask": {
+          "type": "Query",
+          "inputs": {
+            "from": "@body('Filter_Target')",
+            "where": "@and(not(empty(item()?['target'])), not(empty(item()?['psa'])))"
+          },
+          "runAfter": {
+            "Filter_Target": [
               "Succeeded"
             ]
           }
@@ -386,7 +422,7 @@
                       "type": "If",
                       "expression": {
                         "equals": [
-                          "@equals(toLower(parameters('Dry run (new_DryRun)')),'false')",
+                          "@or(equals(toLower(parameters('Dry run (new_DryRun)')),'false'), equals(triggerBody()?['WriteNow'], true))",
                           true
                         ]
                       },
@@ -432,13 +468,44 @@
                       "psa": "@items('Foreach_Device')?['psa']",
                       "autotask": "@outputs('Compose_Current')",
                       "target": "@items('Foreach_Device')?['target']",
-                      "result": "@if(equals(actions('Scope_Write')?['status'], 'Failed'), 'Error', if(equals(toLower(parameters('Dry run (new_DryRun)')),'false'), 'Updated', 'Would update'))"
+                      "result": "@if(equals(actions('Scope_Write')?['status'], 'Failed'), 'Error', if(or(equals(toLower(parameters('Dry run (new_DryRun)')),'false'), equals(triggerBody()?['WriteNow'], true)), 'Updated', 'Would update'))"
                     }
                   }
                 }
               },
               "else": {
-                "actions": {}
+                "actions": {
+                  "If_targeted": {
+                    "type": "If",
+                    "expression": {
+                      "equals": [
+                        "@not(empty(outputs('Compose_Device')))",
+                        true
+                      ]
+                    },
+                    "actions": {
+                      "Record_unchanged": {
+                        "type": "AppendToArrayVariable",
+                        "runAfter": {},
+                        "inputs": {
+                          "name": "Results",
+                          "value": {
+                            "org": "@items('Foreach_Device')?['org']",
+                            "device": "@items('Foreach_Device')?['name']",
+                            "psa": "@items('Foreach_Device')?['psa']",
+                            "autotask": "@outputs('Compose_Current')",
+                            "target": "@items('Foreach_Device')?['target']",
+                            "result": "Already correct"
+                          }
+                        }
+                      }
+                    },
+                    "else": {
+                      "actions": {}
+                    },
+                    "runAfter": {}
+                  }
+                }
               }
             },
             "Record_lookup_error": {
@@ -492,7 +559,7 @@
           "type": "Query",
           "inputs": {
             "from": "@variables('Results')",
-            "where": "@not(contains(createArray('Updated', 'Would update'), item()?['result']))"
+            "where": "@not(contains(createArray('Updated', 'Would update', 'Already correct'), item()?['result']))"
           },
           "runAfter": {
             "Filter_Changed": [
@@ -529,7 +596,7 @@
             "parameters": {
               "emailMessage/To": "@parameters('Summary email recipient (new_NotifyEmail)')",
               "emailMessage/Subject": "Warranty Sync - Autotask Only summary",
-              "emailMessage/Body": "<p>Warranty Sync - Autotask Only finished (@{if(equals(toLower(parameters('Dry run (new_DryRun)')),'false'), 'LIVE', 'DRY RUN')}).</p><ul><li>Devices read from IT Glue: @{length(body('Select_Decided'))}</li><li>With a psa-id and a warranty date: @{length(body('Filter_Autotask'))}</li><li>Checked this run: @{length(outputs('Compose_Batch'))}</li><li>@{if(equals(toLower(parameters('Dry run (new_DryRun)')),'false'), 'Updated', 'Would update')}: @{length(body('Filter_Changed'))}</li><li>Errors: @{length(body('Filter_Failed'))}</li></ul><p>Only devices whose Autotask date differs are listed.</p>@{body('Results_table')}",
+              "emailMessage/Body": "<p>Warranty Sync - Autotask Only finished (@{if(or(equals(toLower(parameters('Dry run (new_DryRun)')),'false'), equals(triggerBody()?['WriteNow'], true)), 'LIVE', 'DRY RUN')}).</p><ul><li>Target: @{if(empty(outputs('Compose_Device')), 'all devices', concat('<b>', outputs('Compose_Device'), '</b>'))}</li><li>Devices read from IT Glue: @{length(body('Select_Decided'))}</li><li>Matching the target: @{length(body('Filter_Target'))}@{if(and(not(empty(outputs('Compose_Device'))), equals(length(body('Filter_Target')), 0)), ' <b>- no active laptop/desktop in IT Glue matches this ID, serial or name</b>', '')}</li><li>With a psa-id and a warranty date: @{length(body('Filter_Autotask'))}@{if(and(greater(length(body('Filter_Target')), 0), equals(length(body('Filter_Autotask')), 0)), ' <b>- the matching device has no psa-id or no warranty date</b>', '')}</li><li>Checked this run: @{length(outputs('Compose_Batch'))}</li><li>@{if(or(equals(toLower(parameters('Dry run (new_DryRun)')),'false'), equals(triggerBody()?['WriteNow'], true)), 'Updated', 'Would update')}: @{length(body('Filter_Changed'))}</li><li>Errors: @{length(body('Filter_Failed'))}</li></ul><p>Devices whose Autotask date differs are listed (a targeted device is always listed).</p>@{body('Results_table')}",
               "emailMessage/Importance": "Normal"
             },
             "authentication": "@parameters('$authentication')"

@@ -6,7 +6,7 @@
   <displayname default="SharePoint list name">
     <label description="SharePoint list name" languagecode="1033" />
   </displayname>
-  <introducedversion>1.0.0.4</introducedversion>
+  <introducedversion>1.0.0.5</introducedversion>
   <iscustomizable>1</iscustomizable>
   <isrequired>0</isrequired>
   <secretstore>0</secretstore>
