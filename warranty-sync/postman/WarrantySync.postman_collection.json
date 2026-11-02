@@ -780,7 +780,7 @@
             "description": "Then re-run 3.2 and check `warrantyExpirationDate`.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": {{psa_id}},\n  \"warrantyExpirationDate\": \"{{test_warranty_date}}\"\n}"
+              "raw": "{\n  \"id\": {{psa_id}},\n  \"warrantyExpirationDate\": \"{{test_warranty_date}}T00:00:00Z\"\n}"
             }
           },
           "event": [

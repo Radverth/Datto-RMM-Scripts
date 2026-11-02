@@ -275,7 +275,7 @@ foreach ($d in $batch) {
       if (-not [string]::IsNullOrWhiteSpace([string]$d.psa)) {
         try {
           $h = @{ UserName = $AutotaskUsername; Secret = $AutotaskSecret; ApiIntegrationCode = $AutotaskIntegrationCode }
-          Invoke-Api -Method PATCH -Uri "$($AutotaskBaseUri.TrimEnd('/'))/ConfigurationItems" -Headers $h -Body @{ id = [long]$d.psa; warrantyExpirationDate = $d.target } | Out-Null
+          Invoke-Api -Method PATCH -Uri "$($AutotaskBaseUri.TrimEnd('/'))/ConfigurationItems" -Headers $h -Body @{ id = [long]$d.psa; warrantyExpirationDate = "$($d.target)T00:00:00Z" } | Out-Null
         } catch { $hadError = $true; $allWritten = $false; $note += "Autotask: $($_.Exception.Message)" }
       } else { $allWritten = $false; $note += "psa-id missing" }
     }

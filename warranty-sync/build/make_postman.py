@@ -217,7 +217,7 @@ writes = {"name": "4. Optional write tests (CHANGES DATA)", "description":
       body={"mode": "raw", "raw": json.dumps({"warrantyDate": "{{test_warranty_date}}"}, indent=2)}, auth=datto_auth),
   req("4.3 Autotask - set warranty on psa_id", "PATCH", "{{autotask_base}}/ConfigurationItems",
       "Then re-run 3.2 and check `warrantyExpirationDate`.", r'''pm.test("200 OK", () => pm.response.to.have.status(200));''',
-      headers=at_headers, body={"mode": "raw", "raw": '{\n  "id": {{psa_id}},\n  "warrantyExpirationDate": "{{test_warranty_date}}"\n}'}),
+      headers=at_headers, body={"mode": "raw", "raw": '{\n  "id": {{psa_id}},\n  "warrantyExpirationDate": "{{test_warranty_date}}T00:00:00Z"\n}'}),
 ]}
 
 collection = {"info": {"name": "Warranty Sync - Setup Lookups", "_postman_id": "6f0f3d8e-2a51-4b7c-9e1d-58c4b2a7d903",

@@ -446,7 +446,7 @@
                             },
                             "parameters": {
                               "body/id": "@int(items('Foreach_Device')?['psa'])",
-                              "body/warrantyExpirationDate": "@items('Foreach_Device')?['target']"
+                              "body/warrantyExpirationDate": "@{items('Foreach_Device')?['target']}T00:00:00Z"
                             }
                           },
                           "runAfter": {}

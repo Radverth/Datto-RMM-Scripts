@@ -660,7 +660,7 @@
                         },
                         "parameters": {
                           "body/id": "@int(items('Foreach_Batch')?['psa'])",
-                          "body/warrantyExpirationDate": "@items('Foreach_Batch')?['target']"
+                          "body/warrantyExpirationDate": "@{items('Foreach_Batch')?['target']}T00:00:00Z"
                         }
                       },
                       "runAfter": {}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the importable Power Automate solution (WarrantySync_1_0_0_10.zip).
+"""Generate the importable Power Automate solution (WarrantySync_1_0_0_11.zip).
 
 Run:  python3 warranty-sync/build/build_solution.py
 Writes the unpacked source to warranty-sync/solution/ and the zip to warranty-sync/.
@@ -10,7 +10,7 @@ from xml.sax.saxutils import escape, quoteattr
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.dirname(HERE)
 SRC = os.path.join(OUT, "solution")
-ZIP = os.path.join(OUT, "WarrantySync_1_0_0_10.zip")
+ZIP = os.path.join(OUT, "WarrantySync_1_0_0_11.zip")
 
 PREFIX = "new"  # matches the environment default publisher (see PUBLISHER below)
 WF_ID = "7b1d3a52-4c6e-4f0a-9a37-2d5e8c1f0b64"
@@ -137,7 +137,7 @@ CONNECTORS = {
         "parameters": [{"name": "id", "in": "path", "required": True, "type": "string", "description": "Autotask configuration item ID (IT Glue psa-id)"}]}},
      "/ConfigurationItems": {"patch": {"responses": ANY, "summary": "Update configuration item", "operationId": "UpdateConfigurationItem",
         "parameters": [{"name": "body", "in": "body", "required": True, "schema": {"type": "object", "properties": {
-             "id": {"type": "integer", "format": "int64"}, "warrantyExpirationDate": {"type": "string", "description": "yyyy-MM-dd"}}}}]}}},
+             "id": {"type": "integer", "format": "int64"}, "warrantyExpirationDate": {"type": "string", "description": "yyyy-MM-ddT00:00:00Z (midnight UTC)"}}}}]}}},
      security={"type": "apiKey", "in": "header", "name": "Secret"}),
   "params": dict(**conn_param("api_key", "Autotask API secret", "Secret of the Autotask API user", True, 2),
                  **conn_param("username", "Autotask API username", "Username of the Autotask API user", False, 3),
@@ -239,7 +239,7 @@ sc_datto = {"type": "Scope", "actions": {"If_rmm_present": cond(
 sc_at = {"type": "Scope", "actions": {"If_psa_present": cond(
     "and(%s, %s, not(empty(%s?['psa'])))" % (live, at_on, IT),
     {"Autotask_write": cc("autotask", "UpdateConfigurationItem", {"body/id": "@int(%s?['psa'])" % IT,
-        "body/warrantyExpirationDate": "@%s?['target']" % IT}, secure=None)})}}
+        "body/warrantyExpirationDate": "@{%s?['target']}T00:00:00Z" % IT}, secure=None)})}}
 
 def failed(scope): return "equals(actions('%s')?['status'], 'Failed')" % scope
 had_err = "or(%s, %s, %s)" % (failed("Scope_ITGlue"), failed("Scope_Datto"), failed("Scope_Autotask"))
@@ -484,7 +484,7 @@ at_flow = single_system_flow(
     get_action=cc("autotask", "GetConfigurationItem", {"id": "@{%s?['psa']}" % ONE}, secure=None),
     current_expr="take(string(coalesce(body('Get_Current')?['item']?['warrantyExpirationDate'], '')), 10)",
     write_action=cc("autotask", "UpdateConfigurationItem", {"body/id": "@int(%s?['psa'])" % ONE,
-        "body/warrantyExpirationDate": "@%s?['target']" % ONE}, secure=None),
+        "body/warrantyExpirationDate": "@{%s?['target']}T00:00:00Z" % ONE}, secure=None),
     pre_actions={})
 
 DT_WF_ID = "9e3a5c71-0b4d-4f28-a6e1-7d2c8b5f4a19"
@@ -592,7 +592,7 @@ FLOWS = [
 # environment (AutotaskaBillitySync_1_0_0_13.zip), which is known to import.
 ORGVER = 'OrganizationVersion="9.2.26102.127" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26102.00127"'
 PUBLISHER = ("DefaultPublisherorgda80817a", "Default Publisher for orgda80817a", "Default publisher for this organization")
-VERSION = "1.0.0.10"
+VERSION = "1.0.0.11"
 
 def write(path, text, bom=False):
     full = os.path.join(SRC, path); os.makedirs(os.path.dirname(full), exist_ok=True)
