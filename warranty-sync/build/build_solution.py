@@ -25,21 +25,120 @@ ENV = {
  "MyITPAttribute": ("myITProcess attribute name", None, True, "Exact IT Glue configuration attribute holding the myITProcess warranty date"),
  "MaxWritesPerRun": ("Max writes per run", "1500", False, "Cap on devices written per night"),
  "WriteAutotask": ("Write Autotask", "true", False, "true/false"),
- "ITGlueBaseUri": ("IT Glue base URI", "https://api.itglue.com", False, "e.g. https://api.eu.itglue.com for EU"),
- "ITGlueApiKey": ("IT Glue API key", None, True, "Needs read + write on Configurations"),
- "DattoApiUrl": ("Datto RMM API URL", None, False, "https://<platform>-api.centrastage.net"),
- "DattoApiKey": ("Datto RMM API key", None, False, ""),
- "DattoApiSecret": ("Datto RMM API secret", None, False, ""),
- "AutotaskBaseUri": ("Autotask REST base URI", None, False, "https://webservicesN.autotask.net/ATServicesRest/V1.0"),
- "AutotaskUsername": ("Autotask API username", None, False, ""),
- "AutotaskSecret": ("Autotask API secret", None, False, ""),
- "AutotaskIntegrationCode": ("Autotask integration code", None, False, ""),
  "SharePointSiteUrl": ("SharePoint site URL", None, True, "Site holding the Warranty Sync State list"),
  "SharePointListName": ("SharePoint list name", "Warranty Sync State", False, "List title (or GUID)"),
  "NotifyEmail": ("Summary email recipient", None, True, "Where the nightly summary is sent"),
 }
 def P(key):  # parameter expression fragment
     return "parameters('%s (%s_%s)')" % (ENV[key][0], PREFIX, key)
+
+# ---- custom connectors: credentials live in the connection, never in the flow ---------------------
+ENV_SUFFIX = "5f7e14506b88214820"   # api-name suffix used by custom connectors in this environment
+
+def conn_param(name, disp, desc, secure, tab):
+    return {name: {"type": "securestring" if secure else "string", "uiDefinition": {
+        "displayName": disp, "description": desc, "tooltip": desc,
+        "constraints": {"tabIndex": tab, "clearText": not secure, "required": "true"}}}}
+
+def setheader(title, name, value, ops):
+    return {"TemplateId": "setheader", "Title": title, "Parameters": {
+        "x-ms-apimTemplateParameter.name": name, "x-ms-apimTemplateParameter.value": value,
+        "x-ms-apimTemplateParameter.existsAction": "override", "x-ms-apimTemplate-policySection": "Request",
+        "x-ms-apimTemplate-operationName": ops}}
+
+def setquery(title, name, value, ops):
+    return {"TemplateId": "setqueryparameter", "Title": title, "Parameters": {
+        "x-ms-apimTemplateParameter.name": name, "x-ms-apimTemplateParameter.value": value,
+        "x-ms-apimTemplateParameter.existsAction": "override", "x-ms-apimTemplate-operationName": ops}}
+
+def hosturl(template, ops):
+    return {"TemplateId": "dynamichosturl", "Title": "Set host URL", "Parameters": {
+        "x-ms-apimTemplateParameter.urlTemplate": template, "x-ms-apimTemplate-operationName": ops}}
+
+ANY = {"default": {"description": "default", "schema": {}}}
+
+def swagger(title, desc, host, base, paths, security=None):
+    d = {"swagger": "2.0", "info": {"title": title, "description": desc, "version": "1.0"}, "host": host,
+         "basePath": base, "schemes": ["https"], "consumes": [], "produces": [], "paths": paths,
+         "definitions": {}, "parameters": {}, "responses": {}, "tags": []}
+    if security:
+        d["securityDefinitions"] = {"api_key": security}; d["security"] = [{"api_key": []}]
+    return d
+
+CONNECTORS = {
+ "itglue": {
+  "name": "new_5Fwsitglue", "id": "3e9c6a10-52b4-4d1f-8a7e-0c2b9f4d6e81", "display": "IT Glue (Warranty Sync)",
+  "desc": "IT Glue configurations: list and update warranty date.", "color": "#1f5fa6",
+  "swagger": swagger("IT Glue (Warranty Sync)", "IT Glue configurations for the warranty sync", "api.itglue.com", "/", {
+     "/configurations": {"get": {"responses": ANY, "summary": "List configurations", "operationId": "ListConfigurations",
+        "parameters": [
+          {"name": "filter[configuration_type_id]", "in": "query", "required": False, "type": "string"},
+          {"name": "filter[configuration_status_id]", "in": "query", "required": False, "type": "string"},
+          {"name": "filter[archived]", "in": "query", "required": False, "type": "string"},
+          {"name": "page[size]", "in": "query", "required": False, "type": "integer"},
+          {"name": "page[number]", "in": "query", "required": False, "type": "integer"}]}},
+     "/configurations/{id}": {"patch": {"responses": ANY, "summary": "Update configuration", "operationId": "UpdateConfiguration",
+        "parameters": [{"name": "id", "in": "path", "required": True, "type": "string"},
+          {"name": "body", "in": "body", "required": True, "schema": {"type": "object", "properties": {
+             "data": {"type": "object", "properties": {"type": {"type": "string", "default": "configurations"},
+               "attributes": {"type": "object", "properties": {"warranty-expires-at": {"type": "string", "description": "yyyy-MM-dd"}}}}}}}}]}}},
+     security={"type": "apiKey", "in": "header", "name": "x-api-key"}),
+  "params": dict(**conn_param("api_key", "IT Glue API key", "IT Glue API key with read/write on Configurations", True, 2),
+                 **conn_param("host", "IT Glue API host", "api.itglue.com (US), api.eu.itglue.com (EU) or api.au.itglue.com (AU)", False, 3)),
+  "policies": [hosturl("https://@connectionParameters('host')", ["ListConfigurations", "UpdateConfiguration"]),
+               setheader("Set accept", "Accept", "application/vnd.api+json", ["ListConfigurations", "UpdateConfiguration"]),
+               setheader("Set content type", "Content-Type", "application/vnd.api+json", ["UpdateConfiguration"])],
+ },
+ "datto": {
+  "name": "new_5Fwsdattormm", "id": "8a4f2d6b-1c3e-4b7a-9d05-6e8f1a2b3c47", "display": "Datto RMM (Warranty Sync)",
+  "desc": "Datto RMM API v2: get token and set device warranty date.", "color": "#0a6ebd",
+  "swagger": swagger("Datto RMM (Warranty Sync)", "Datto RMM API v2 for the warranty sync", "pinotage-api.centrastage.net", "/", {
+     "/auth/oauth/token": {"post": {"summary": "Get token", "operationId": "GetToken",
+        "description": "Uses the API key and secret stored in the connection.", "parameters": [],
+        "responses": {"200": {"description": "OK", "schema": {"type": "object", "properties": {
+            "access_token": {"type": "string"}, "token_type": {"type": "string"}, "expires_in": {"type": "integer"}}}}}}},
+     "/api/v2/device/{deviceUid}/warranty": {"post": {"responses": ANY, "summary": "Set device warranty", "operationId": "SetDeviceWarranty",
+        "parameters": [{"name": "deviceUid", "in": "path", "required": True, "type": "string", "description": "Datto device UID (IT Glue rmm-id)"},
+          {"name": "Authorization", "in": "header", "required": True, "type": "string", "description": "Bearer <access_token>"},
+          {"name": "body", "in": "body", "required": True, "schema": {"type": "object", "properties": {
+             "warrantyDate": {"type": "string", "description": "yyyy-MM-dd"}}}}]}}}),
+  "params": dict(**conn_param("platform", "Datto RMM platform", "Your platform name, e.g. pinotage, merlot, concord, vidal, zinfandel, syrah", False, 2),
+                 **conn_param("apiKey", "Datto RMM API key", "API key from Setup > Users > API", True, 3),
+                 **conn_param("apiSecret", "Datto RMM API secret", "API secret key", True, 4)),
+  "policies": [hosturl("https://@connectionParameters('platform')-api.centrastage.net", ["GetToken", "SetDeviceWarranty"]),
+               setheader("Set token client", "Authorization", "Basic cHVibGljLWNsaWVudDpwdWJsaWM=", ["GetToken"]),
+               setheader("Set token content type", "Content-Type", "application/x-www-form-urlencoded", ["GetToken"]),
+               setquery("Set grant type", "grant_type", "password", ["GetToken"]),
+               setquery("Set API key", "username", "@connectionParameters('apiKey')", ["GetToken"]),
+               setquery("Set API secret", "password", "@connectionParameters('apiSecret')", ["GetToken"]),
+               setheader("Set content type", "Content-Type", "application/json", ["SetDeviceWarranty"])],
+ },
+ "autotask": {
+  "name": "new_5Fwsautotask", "id": "c51e7b38-9f2a-4e6d-b4c1-2d7a8e9f0b56", "display": "Autotask (Warranty Sync)",
+  "desc": "Autotask REST API: update configuration item warranty date.", "color": "#e5622b",
+  "swagger": swagger("Autotask (Warranty Sync)", "Autotask REST API for the warranty sync", "webservices4.autotask.net", "/atservicesrest/V1.0", {
+     "/ConfigurationItems": {"patch": {"responses": ANY, "summary": "Update configuration item", "operationId": "UpdateConfigurationItem",
+        "parameters": [{"name": "body", "in": "body", "required": True, "schema": {"type": "object", "properties": {
+             "id": {"type": "integer", "format": "int64"}, "warrantyExpirationDate": {"type": "string", "description": "yyyy-MM-dd"}}}}]}}},
+     security={"type": "apiKey", "in": "header", "name": "Secret"}),
+  "params": dict(**conn_param("api_key", "Autotask API secret", "Secret of the Autotask API user", True, 2),
+                 **conn_param("username", "Autotask API username", "Username of the Autotask API user", False, 3),
+                 **conn_param("integrationCode", "Autotask integration code", "Tracking identifier of the API user", True, 4)),
+  "policies": [setheader("Set username", "UserName", "@connectionParameters('username')", ["UpdateConfigurationItem"]),
+               setheader("Set integration code", "ApiIntegrationcode", "@connectionParameters('integrationCode')", ["UpdateConfigurationItem"]),
+               setheader("Set content type", "Content-Type", "application/json", ["UpdateConfigurationItem"])],
+ },
+}
+for c in CONNECTORS.values():
+    c["api"] = "shared_" + c["name"].lower().replace("_", "-") + "-" + ENV_SUFFIX
+    c["connref"] = PREFIX + "_shared" + c["name"][len(PREFIX) + 1:].lower() + ENV_SUFFIX + "_wsync"
+
+def cc(key, op, params, secure=("outputs",), run_after=None):
+    api = CONNECTORS[key]["api"]
+    a = {"type": "OpenApiConnection", "inputs": {"host": {"apiId": "/providers/Microsoft.PowerApps/apis/" + api,
+         "operationId": op, "connectionName": api}, "parameters": params}, "runAfter": run_after or {}}
+    if secure: a["runtimeConfiguration"] = {"secureData": {"properties": list(secure)}}
+    return a
 
 # ---- helpers ----------------------------------------------------------------------------------
 ALL = ["Succeeded", "Failed", "Skipped", "TimedOut"]
@@ -51,14 +150,6 @@ def sp(op, params, run_after=None):
             "inputs": {"host": {"connectionName": "shared_sharepointonline", "operationId": op, "apiId": SP_API},
                        "parameters": params, "authentication": "@parameters('$authentication')"},
             "runAfter": run_after or {}}
-
-def http(method, uri, headers=None, body=None, run_after=None, **extra):
-    i = {"method": method, "uri": uri}
-    if headers: i["headers"] = headers
-    if body is not None: i["body"] = body
-    i.update(extra)
-    return {"type": "Http", "inputs": i, "runAfter": run_after or {},
-            "runtimeConfiguration": {"secureData": {"properties": ["inputs"]}}}
 
 def cond(expr, then, run_after=None):
     return {"type": "If", "expression": {"equals": ["@" + expr, True]},
@@ -78,15 +169,13 @@ at_on = "equals(toLower(%s),'true')" % P("WriteAutotask")
 IT = "items('Foreach_Batch')"
 site, lst = P("SharePointSiteUrl"), P("SharePointListName")
 
-page_url = ("@{%s}/configurations?filter[configuration_type_id]=@{items('Foreach_Type')}"
-            "&filter[configuration_status_id]=@{%s}&filter[archived]=false"
-            "&page[size]=1000&page[number]=@{variables('Page')}") % (P("ITGlueBaseUri"), P("ActiveStatusId"))
-itg_headers = {"x-api-key": "@%s" % P("ITGlueApiKey"), "Accept": "application/vnd.api+json"}
-
 def attr(name): return "item()?['attributes']?['%s']" % name
 
 until_actions = chain({
-    "Get_IT_Glue_page": http("GET", page_url, itg_headers),
+    "Get_IT_Glue_page": cc("itglue", "ListConfigurations", {
+        "filter[configuration_type_id]": "@{items('Foreach_Type')}",
+        "filter[configuration_status_id]": "@{%s}" % P("ActiveStatusId"),
+        "filter[archived]": "false", "page[size]": 1000, "page[number]": "@variables('Page')"}, secure=None),
     "Select_Clean": {"type": "Select", "inputs": {
         "from": "@body('Get_IT_Glue_page')?['data']",
         "select": {
@@ -122,20 +211,16 @@ decided = {"id": "@item()?['id']", "org": "@item()?['org']", "name": "@item()?['
 # per-device actions
 sc_glue = {"type": "Scope", "actions": {"If_glue_changed": cond(
     "and(%s, not(equals(%s?['target'], %s?['glue'])))" % (live, IT, IT),
-    {"ITGlue_write": http("PATCH", "@{%s}/configurations/@{%s?['id']}" % (P("ITGlueBaseUri"), IT),
-        dict(itg_headers, **{"Content-Type": "application/vnd.api+json"}),
-        {"data": {"type": "configurations", "attributes": {"warranty-expires-at": "@%s?['target']" % IT}}})})}}
+    {"ITGlue_write": cc("itglue", "UpdateConfiguration", {"id": "@{%s?['id']}" % IT,
+        "body/data/type": "configurations", "body/data/attributes/warranty-expires-at": "@%s?['target']" % IT}, secure=None)})}}
 sc_datto = {"type": "Scope", "actions": {"If_rmm_present": cond(
     "and(%s, not(empty(%s?['rmm'])))" % (live, IT),
-    {"Datto_write": http("POST", "@{%s}/api/v2/device/@{%s?['rmm']}/warranty" % (P("DattoApiUrl"), IT),
-        {"Authorization": "Bearer @{variables('DattoToken')}", "Content-Type": "application/json"},
-        {"warrantyDate": "@%s?['target']" % IT})})}}
+    {"Datto_write": cc("datto", "SetDeviceWarranty", {"deviceUid": "@{%s?['rmm']}" % IT,
+        "Authorization": "Bearer @{variables('DattoToken')}", "body/warrantyDate": "@%s?['target']" % IT}, secure=("inputs",))})}}
 sc_at = {"type": "Scope", "actions": {"If_psa_present": cond(
     "and(%s, %s, not(empty(%s?['psa'])))" % (live, at_on, IT),
-    {"Autotask_write": http("PATCH", "@{%s}/ConfigurationItems" % P("AutotaskBaseUri"),
-        {"UserName": "@%s" % P("AutotaskUsername"), "Secret": "@%s" % P("AutotaskSecret"),
-         "ApiIntegrationCode": "@%s" % P("AutotaskIntegrationCode"), "Content-Type": "application/json"},
-        {"id": "@int(%s?['psa'])" % IT, "warrantyExpirationDate": "@%s?['target']" % IT})})}}
+    {"Autotask_write": cc("autotask", "UpdateConfigurationItem", {"body/id": "@int(%s?['psa'])" % IT,
+        "body/warrantyExpirationDate": "@%s?['target']" % IT}, secure=None)})}}
 
 def failed(scope): return "equals(actions('%s')?['status'], 'Failed')" % scope
 had_err = "or(%s, %s, %s)" % (failed("Scope_ITGlue"), failed("Scope_Datto"), failed("Scope_Autotask"))
@@ -193,11 +278,7 @@ actions = {
     "Init_DattoToken": {"type": "InitializeVariable", "inputs": {"variables": [{"name": "DattoToken", "type": "string", "value": ""}]}},
     "Compose_TypeIds": {"type": "Compose", "inputs": "@createArray(%s, %s)" % (P("LaptopTypeId"), P("DesktopTypeId"))},
     "If_live_get_token": cond(live, {
-        "Get_Datto_token": http("POST", "@{%s}/auth/oauth/token" % P("DattoApiUrl"),
-            {"Content-Type": "application/x-www-form-urlencoded"},
-            "grant_type=password&username=@{encodeUriComponent(%s)}&password=@{encodeUriComponent(%s)}" % (P("DattoApiKey"), P("DattoApiSecret")),
-            authentication={"type": "Basic", "username": "public-client", "password": "public"},
-            ) | {"runtimeConfiguration": {"secureData": {"properties": ["inputs", "outputs"]}}},
+        "Get_Datto_token": cc("datto", "GetToken", {}, secure=("inputs", "outputs")),
         "Set_DattoToken": {"type": "SetVariable", "inputs": {"name": "DattoToken", "value": "@body('Get_Datto_token')?['access_token']"},
                            "runAfter": {"Get_Datto_token": ["Succeeded"]},
                            "runtimeConfiguration": {"secureData": {"properties": ["inputs", "outputs"]}}}}),
@@ -244,7 +325,9 @@ flow = {"properties": {
         "shared_sharepointonline": {"runtimeSource": "embedded", "connection": {"connectionReferenceLogicalName": PREFIX + "_sharedsharepointonline_wsync"},
                                     "api": {"name": "shared_sharepointonline"}},
         "shared_office365": {"runtimeSource": "embedded", "connection": {"connectionReferenceLogicalName": PREFIX + "_sharedoffice365_wsync"},
-                             "api": {"name": "shared_office365"}}},
+                             "api": {"name": "shared_office365"}},
+        **{c["api"]: {"runtimeSource": "embedded", "connection": {"connectionReferenceLogicalName": c["connref"]},
+                      "api": {"name": c["api"], "logicalName": c["name"]}} for c in CONNECTORS.values()}},
     "definition": {"$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
                    "contentVersion": "1.0.0.0", "parameters": params,
                    "triggers": {"Recurrence": {"type": "Recurrence", "recurrence": {
@@ -273,7 +356,23 @@ shutil.rmtree(SRC, ignore_errors=True)
 wf_file = "/Workflows/WarrantySync-Nightly-%s.json" % WF_ID.upper()
 write(wf_file.lstrip("/"), json.dumps(flow, indent=2, ensure_ascii=False))
 write("[Content_Types].xml", '<?xml version="1.0" encoding="utf-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-      '<Default Extension="xml" ContentType="application/octet-stream" /><Default Extension="json" ContentType="application/octet-stream" /></Types>', bom=True)
+      '<Default Extension="xml" ContentType="application/octet-stream" /><Default Extension="json" ContentType="application/octet-stream" /><Default Extension="Png" ContentType="application/octet-stream" /></Types>', bom=True)
+
+def png(hexcolor, size=100):
+    import struct, zlib
+    r, g, b = (int(hexcolor[i:i + 2], 16) for i in (1, 3, 5))
+    raw = b"".join(b"\x00" + bytes((r, g, b, 255)) * size for _ in range(size))
+    def chunk(t, d): return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
+
+for c in CONNECTORS.values():
+    n = c["name"]
+    write("Connector/%s_openapidefinition.json" % n, json.dumps(c["swagger"], separators=(",", ":")))
+    write("Connector/%s_connectionparameters.json" % n, json.dumps(c["params"], separators=(",", ":")))
+    write("Connector/%s_policytemplateinstances.json" % n, json.dumps(c["policies"], separators=(",", ":")))
+    full = os.path.join(SRC, "Connector", "%s_iconblob.Png" % n)
+    with open(full, "wb") as fh: fh.write(png(c["color"]))
 
 addr_fields = ["AddressTypeCode", "City", "County", "Country", "Fax", "FreightTermsCode", "ImportSequenceNumber", "Latitude",
                "Line1", "Line2", "Line3", "Longitude", "Name", "PostalCode", "PostOfficeBox", "PrimaryContactName",
@@ -292,15 +391,28 @@ write("solution.xml",
  '      <EMailAddress xsi:nil="true"></EMailAddress>\n      <SupportingWebsiteUrl xsi:nil="true"></SupportingWebsiteUrl>\n'
  '      <CustomizationPrefix>%s</CustomizationPrefix>\n      <CustomizationOptionValuePrefix>10000</CustomizationOptionValuePrefix>\n' % PREFIX +
  '      <Addresses>\n' + address(1) + address(2) + '      </Addresses>\n    </Publisher>\n'
- '    <RootComponents>\n      <RootComponent type="29" id="{%s}" behavior="0" />\n    </RootComponents>\n' % WF_ID +
+ '    <RootComponents>\n      <RootComponent type="29" id="{%s}" behavior="0" />\n' % WF_ID +
+ "".join('      <RootComponent type="372" id="{%s}" schemaName="%s" behavior="0" />\n' % (c["id"], c["name"]) for c in CONNECTORS.values()) +
+ '    </RootComponents>\n' +
  '    <MissingDependencies />\n  </SolutionManifest>\n</ImportExportXml>')
 
-def connref(logical, disp, api):
+def connref(logical, disp, api, custom_id=None):
     return ('    <connectionreference connectionreferencelogicalname="%s">\n'
             '      <connectionreferencedisplayname>%s</connectionreferencedisplayname>\n'
-            '      <connectorid>/providers/Microsoft.PowerApps/apis/%s</connectorid>\n'
+            '      <connectorid>/providers/Microsoft.PowerApps/apis/%s</connectorid>\n' % (logical, escape(disp), api) +
+            ('      <customconnectorid>\n        <connectorid>%s</connectorid>\n      </customconnectorid>\n' % custom_id if custom_id else '') +
             '      <iscustomizable>1</iscustomizable>\n      <promptingbehavior>0</promptingbehavior>\n'
-            '      <statecode>0</statecode>\n      <statuscode>1</statuscode>\n    </connectionreference>\n') % (logical, escape(disp), api)
+            '      <statecode>0</statecode>\n      <statuscode>1</statuscode>\n    </connectionreference>\n')
+
+def connector_xml(c):
+    n = c["name"]
+    return ('    <Connector>\n      <connectorid>%s</connectorid>\n      <description>%s</description>\n'
+            '      <displayname>%s</displayname>\n      <iconbrandcolor>%s</iconbrandcolor>\n      <name>%s</name>\n'
+            '      <connectortype>1</connectortype>\n      <openapidefinition>/Connector/%s_openapidefinition.json</openapidefinition>\n'
+            '      <connectionparameters>/Connector/%s_connectionparameters.json</connectionparameters>\n'
+            '      <policytemplateinstances>/Connector/%s_policytemplateinstances.json</policytemplateinstances>\n'
+            '      <iconblob>/Connector/%s_iconblob.Png</iconblob>\n    </Connector>\n') % (
+            c["id"], escape(c["desc"]), escape(c["display"]), c["color"], n, n, n, n, n)
 
 write("customizations.xml",
  '<ImportExportXml xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" %s>\n' % ORGVER +
@@ -317,7 +429,9 @@ write("customizations.xml",
  '      <LocalizedNames>\n        <LocalizedName languagecode="1033" description=%s />\n      </LocalizedNames>\n' % quoteattr(FLOW_NAME) +
  '    </Workflow>\n  </Workflows>\n  <FieldSecurityProfiles></FieldSecurityProfiles>\n  <Templates />\n  <EntityMaps />\n'
  '  <EntityRelationships />\n  <OrganizationSettings />\n  <optionsets />\n  <CustomControls />\n  <EntityDataProviders />\n'
+ '  <Connectors>\n' + "".join(connector_xml(c) for c in CONNECTORS.values()) + '  </Connectors>\n'
  '  <connectionreferences>\n' +
+ "".join(connref(c["connref"], c["display"], c["api"], c["id"]) for c in CONNECTORS.values()) +
  connref(PREFIX + "_sharedoffice365_wsync", "Office 365 Outlook (Warranty Sync)", "shared_office365") +
  connref(PREFIX + "_sharedsharepointonline_wsync", "SharePoint (Warranty Sync State)", "shared_sharepointonline") +
  '  </connectionreferences>\n  <Languages>\n    <Language>1033</Language>\n  </Languages>\n</ImportExportXml>')
@@ -340,6 +454,7 @@ for root, _, files in os.walk(SRC):
 first = ["customizations.xml", "solution.xml"]
 last = ["[Content_Types].xml"]
 names = first + sorted(n for n in names if n.startswith("Workflows/")) + \
+        sorted(n for n in names if n.startswith("Connector/")) + \
         sorted(n for n in names if n.startswith("environmentvariabledefinitions/")) + last
 with zipfile.ZipFile(ZIP, "w", zipfile.ZIP_DEFLATED) as z:
     for n in names:

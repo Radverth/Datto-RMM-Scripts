@@ -36,7 +36,78 @@
   <optionsets />
   <CustomControls />
   <EntityDataProviders />
+  <Connectors>
+    <Connector>
+      <connectorid>3e9c6a10-52b4-4d1f-8a7e-0c2b9f4d6e81</connectorid>
+      <description>IT Glue configurations: list and update warranty date.</description>
+      <displayname>IT Glue (Warranty Sync)</displayname>
+      <iconbrandcolor>#1f5fa6</iconbrandcolor>
+      <name>new_5Fwsitglue</name>
+      <connectortype>1</connectortype>
+      <openapidefinition>/Connector/new_5Fwsitglue_openapidefinition.json</openapidefinition>
+      <connectionparameters>/Connector/new_5Fwsitglue_connectionparameters.json</connectionparameters>
+      <policytemplateinstances>/Connector/new_5Fwsitglue_policytemplateinstances.json</policytemplateinstances>
+      <iconblob>/Connector/new_5Fwsitglue_iconblob.Png</iconblob>
+    </Connector>
+    <Connector>
+      <connectorid>8a4f2d6b-1c3e-4b7a-9d05-6e8f1a2b3c47</connectorid>
+      <description>Datto RMM API v2: get token and set device warranty date.</description>
+      <displayname>Datto RMM (Warranty Sync)</displayname>
+      <iconbrandcolor>#0a6ebd</iconbrandcolor>
+      <name>new_5Fwsdattormm</name>
+      <connectortype>1</connectortype>
+      <openapidefinition>/Connector/new_5Fwsdattormm_openapidefinition.json</openapidefinition>
+      <connectionparameters>/Connector/new_5Fwsdattormm_connectionparameters.json</connectionparameters>
+      <policytemplateinstances>/Connector/new_5Fwsdattormm_policytemplateinstances.json</policytemplateinstances>
+      <iconblob>/Connector/new_5Fwsdattormm_iconblob.Png</iconblob>
+    </Connector>
+    <Connector>
+      <connectorid>c51e7b38-9f2a-4e6d-b4c1-2d7a8e9f0b56</connectorid>
+      <description>Autotask REST API: update configuration item warranty date.</description>
+      <displayname>Autotask (Warranty Sync)</displayname>
+      <iconbrandcolor>#e5622b</iconbrandcolor>
+      <name>new_5Fwsautotask</name>
+      <connectortype>1</connectortype>
+      <openapidefinition>/Connector/new_5Fwsautotask_openapidefinition.json</openapidefinition>
+      <connectionparameters>/Connector/new_5Fwsautotask_connectionparameters.json</connectionparameters>
+      <policytemplateinstances>/Connector/new_5Fwsautotask_policytemplateinstances.json</policytemplateinstances>
+      <iconblob>/Connector/new_5Fwsautotask_iconblob.Png</iconblob>
+    </Connector>
+  </Connectors>
   <connectionreferences>
+    <connectionreference connectionreferencelogicalname="new_shared5fwsitglue5f7e14506b88214820_wsync">
+      <connectionreferencedisplayname>IT Glue (Warranty Sync)</connectionreferencedisplayname>
+      <connectorid>/providers/Microsoft.PowerApps/apis/shared_new-5fwsitglue-5f7e14506b88214820</connectorid>
+      <customconnectorid>
+        <connectorid>3e9c6a10-52b4-4d1f-8a7e-0c2b9f4d6e81</connectorid>
+      </customconnectorid>
+      <iscustomizable>1</iscustomizable>
+      <promptingbehavior>0</promptingbehavior>
+      <statecode>0</statecode>
+      <statuscode>1</statuscode>
+    </connectionreference>
+    <connectionreference connectionreferencelogicalname="new_shared5fwsdattormm5f7e14506b88214820_wsync">
+      <connectionreferencedisplayname>Datto RMM (Warranty Sync)</connectionreferencedisplayname>
+      <connectorid>/providers/Microsoft.PowerApps/apis/shared_new-5fwsdattormm-5f7e14506b88214820</connectorid>
+      <customconnectorid>
+        <connectorid>8a4f2d6b-1c3e-4b7a-9d05-6e8f1a2b3c47</connectorid>
+      </customconnectorid>
+      <iscustomizable>1</iscustomizable>
+      <promptingbehavior>0</promptingbehavior>
+      <statecode>0</statecode>
+      <statuscode>1</statuscode>
+    </connectionreference>
+    <connectionreference connectionreferencelogicalname="new_shared5fwsautotask5f7e14506b88214820_wsync">
+      <connectionreferencedisplayname>Autotask (Warranty Sync)</connectionreferencedisplayname>
+      <connectorid>/providers/Microsoft.PowerApps/apis/shared_new-5fwsautotask-5f7e14506b88214820</connectorid>
+      <customconnectorid>
+        <connectorid>c51e7b38-9f2a-4e6d-b4c1-2d7a8e9f0b56</connectorid>
+      </customconnectorid>
+      <iscustomizable>1</iscustomizable>
+      <promptingbehavior>0</promptingbehavior>
+      <statecode>0</statecode>
+      <statuscode>1</statuscode>
+    </connectionreference>
     <connectionreference connectionreferencelogicalname="new_sharedoffice365_wsync">
       <connectionreferencedisplayname>Office 365 Outlook (Warranty Sync)</connectionreferencedisplayname>
       <connectorid>/providers/Microsoft.PowerApps/apis/shared_office365</connectorid>

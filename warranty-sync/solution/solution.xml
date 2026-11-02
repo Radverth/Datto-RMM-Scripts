@@ -80,6 +80,9 @@
     </Publisher>
     <RootComponents>
       <RootComponent type="29" id="{7b1d3a52-4c6e-4f0a-9a37-2d5e8c1f0b64}" behavior="0" />
+      <RootComponent type="372" id="{3e9c6a10-52b4-4d1f-8a7e-0c2b9f4d6e81}" schemaName="new_5Fwsitglue" behavior="0" />
+      <RootComponent type="372" id="{8a4f2d6b-1c3e-4b7a-9d05-6e8f1a2b3c47}" schemaName="new_5Fwsdattormm" behavior="0" />
+      <RootComponent type="372" id="{c51e7b38-9f2a-4e6d-b4c1-2d7a8e9f0b56}" schemaName="new_5Fwsautotask" behavior="0" />
     </RootComponents>
     <MissingDependencies />
   </SolutionManifest>

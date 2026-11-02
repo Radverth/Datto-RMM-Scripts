@@ -18,6 +18,36 @@
         "api": {
           "name": "shared_office365"
         }
+      },
+      "shared_new-5fwsitglue-5f7e14506b88214820": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "new_shared5fwsitglue5f7e14506b88214820_wsync"
+        },
+        "api": {
+          "name": "shared_new-5fwsitglue-5f7e14506b88214820",
+          "logicalName": "new_5Fwsitglue"
+        }
+      },
+      "shared_new-5fwsdattormm-5f7e14506b88214820": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "new_shared5fwsdattormm5f7e14506b88214820_wsync"
+        },
+        "api": {
+          "name": "shared_new-5fwsdattormm-5f7e14506b88214820",
+          "logicalName": "new_5Fwsdattormm"
+        }
+      },
+      "shared_new-5fwsautotask-5f7e14506b88214820": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "new_shared5fwsautotask5f7e14506b88214820_wsync"
+        },
+        "api": {
+          "name": "shared_new-5fwsautotask-5f7e14506b88214820",
+          "logicalName": "new_5Fwsautotask"
+        }
       }
     },
     "definition": {
@@ -79,69 +109,6 @@
           "type": "String",
           "metadata": {
             "schemaName": "new_WriteAutotask"
-          }
-        },
-        "IT Glue base URI (new_ITGlueBaseUri)": {
-          "defaultValue": "https://api.itglue.com",
-          "type": "String",
-          "metadata": {
-            "schemaName": "new_ITGlueBaseUri"
-          }
-        },
-        "IT Glue API key (new_ITGlueApiKey)": {
-          "defaultValue": "",
-          "type": "String",
-          "metadata": {
-            "schemaName": "new_ITGlueApiKey"
-          }
-        },
-        "Datto RMM API URL (new_DattoApiUrl)": {
-          "defaultValue": "",
-          "type": "String",
-          "metadata": {
-            "schemaName": "new_DattoApiUrl"
-          }
-        },
-        "Datto RMM API key (new_DattoApiKey)": {
-          "defaultValue": "",
-          "type": "String",
-          "metadata": {
-            "schemaName": "new_DattoApiKey"
-          }
-        },
-        "Datto RMM API secret (new_DattoApiSecret)": {
-          "defaultValue": "",
-          "type": "String",
-          "metadata": {
-            "schemaName": "new_DattoApiSecret"
-          }
-        },
-        "Autotask REST base URI (new_AutotaskBaseUri)": {
-          "defaultValue": "",
-          "type": "String",
-          "metadata": {
-            "schemaName": "new_AutotaskBaseUri"
-          }
-        },
-        "Autotask API username (new_AutotaskUsername)": {
-          "defaultValue": "",
-          "type": "String",
-          "metadata": {
-            "schemaName": "new_AutotaskUsername"
-          }
-        },
-        "Autotask API secret (new_AutotaskSecret)": {
-          "defaultValue": "",
-          "type": "String",
-          "metadata": {
-            "schemaName": "new_AutotaskSecret"
-          }
-        },
-        "Autotask integration code (new_AutotaskIntegrationCode)": {
-          "defaultValue": "",
-          "type": "String",
-          "metadata": {
-            "schemaName": "new_AutotaskIntegrationCode"
           }
         },
         "SharePoint site URL (new_SharePointSiteUrl)": {
@@ -285,19 +252,14 @@
           },
           "actions": {
             "Get_Datto_token": {
-              "type": "Http",
+              "type": "OpenApiConnection",
               "inputs": {
-                "method": "POST",
-                "uri": "@{parameters('Datto RMM API URL (new_DattoApiUrl)')}/auth/oauth/token",
-                "headers": {
-                  "Content-Type": "application/x-www-form-urlencoded"
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_new-5fwsdattormm-5f7e14506b88214820",
+                  "operationId": "GetToken",
+                  "connectionName": "shared_new-5fwsdattormm-5f7e14506b88214820"
                 },
-                "body": "grant_type=password&username=@{encodeUriComponent(parameters('Datto RMM API key (new_DattoApiKey)'))}&password=@{encodeUriComponent(parameters('Datto RMM API secret (new_DattoApiSecret)'))}",
-                "authentication": {
-                  "type": "Basic",
-                  "username": "public-client",
-                  "password": "public"
-                }
+                "parameters": {}
               },
               "runAfter": {},
               "runtimeConfiguration": {
@@ -360,23 +322,22 @@
               },
               "actions": {
                 "Get_IT_Glue_page": {
-                  "type": "Http",
+                  "type": "OpenApiConnection",
                   "inputs": {
-                    "method": "GET",
-                    "uri": "@{parameters('IT Glue base URI (new_ITGlueBaseUri)')}/configurations?filter[configuration_type_id]=@{items('Foreach_Type')}&filter[configuration_status_id]=@{parameters('IT Glue Active status ID (new_ActiveStatusId)')}&filter[archived]=false&page[size]=1000&page[number]=@{variables('Page')}",
-                    "headers": {
-                      "x-api-key": "@parameters('IT Glue API key (new_ITGlueApiKey)')",
-                      "Accept": "application/vnd.api+json"
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_new-5fwsitglue-5f7e14506b88214820",
+                      "operationId": "ListConfigurations",
+                      "connectionName": "shared_new-5fwsitglue-5f7e14506b88214820"
+                    },
+                    "parameters": {
+                      "filter[configuration_type_id]": "@{items('Foreach_Type')}",
+                      "filter[configuration_status_id]": "@{parameters('IT Glue Active status ID (new_ActiveStatusId)')}",
+                      "filter[archived]": "false",
+                      "page[size]": 1000,
+                      "page[number]": "@variables('Page')"
                     }
                   },
-                  "runAfter": {},
-                  "runtimeConfiguration": {
-                    "secureData": {
-                      "properties": [
-                        "inputs"
-                      ]
-                    }
-                  }
+                  "runAfter": {}
                 },
                 "Select_Clean": {
                   "type": "Select",
@@ -581,32 +542,20 @@
                   },
                   "actions": {
                     "ITGlue_write": {
-                      "type": "Http",
+                      "type": "OpenApiConnection",
                       "inputs": {
-                        "method": "PATCH",
-                        "uri": "@{parameters('IT Glue base URI (new_ITGlueBaseUri)')}/configurations/@{items('Foreach_Batch')?['id']}",
-                        "headers": {
-                          "x-api-key": "@parameters('IT Glue API key (new_ITGlueApiKey)')",
-                          "Accept": "application/vnd.api+json",
-                          "Content-Type": "application/vnd.api+json"
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_new-5fwsitglue-5f7e14506b88214820",
+                          "operationId": "UpdateConfiguration",
+                          "connectionName": "shared_new-5fwsitglue-5f7e14506b88214820"
                         },
-                        "body": {
-                          "data": {
-                            "type": "configurations",
-                            "attributes": {
-                              "warranty-expires-at": "@items('Foreach_Batch')?['target']"
-                            }
-                          }
+                        "parameters": {
+                          "id": "@{items('Foreach_Batch')?['id']}",
+                          "body/data/type": "configurations",
+                          "body/data/attributes/warranty-expires-at": "@items('Foreach_Batch')?['target']"
                         }
                       },
-                      "runAfter": {},
-                      "runtimeConfiguration": {
-                        "secureData": {
-                          "properties": [
-                            "inputs"
-                          ]
-                        }
-                      }
+                      "runAfter": {}
                     }
                   },
                   "else": {
@@ -637,16 +586,17 @@
                   },
                   "actions": {
                     "Datto_write": {
-                      "type": "Http",
+                      "type": "OpenApiConnection",
                       "inputs": {
-                        "method": "POST",
-                        "uri": "@{parameters('Datto RMM API URL (new_DattoApiUrl)')}/api/v2/device/@{items('Foreach_Batch')?['rmm']}/warranty",
-                        "headers": {
-                          "Authorization": "Bearer @{variables('DattoToken')}",
-                          "Content-Type": "application/json"
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_new-5fwsdattormm-5f7e14506b88214820",
+                          "operationId": "SetDeviceWarranty",
+                          "connectionName": "shared_new-5fwsdattormm-5f7e14506b88214820"
                         },
-                        "body": {
-                          "warrantyDate": "@items('Foreach_Batch')?['target']"
+                        "parameters": {
+                          "deviceUid": "@{items('Foreach_Batch')?['rmm']}",
+                          "Authorization": "Bearer @{variables('DattoToken')}",
+                          "body/warrantyDate": "@items('Foreach_Batch')?['target']"
                         }
                       },
                       "runAfter": {},
@@ -687,29 +637,19 @@
                   },
                   "actions": {
                     "Autotask_write": {
-                      "type": "Http",
+                      "type": "OpenApiConnection",
                       "inputs": {
-                        "method": "PATCH",
-                        "uri": "@{parameters('Autotask REST base URI (new_AutotaskBaseUri)')}/ConfigurationItems",
-                        "headers": {
-                          "UserName": "@parameters('Autotask API username (new_AutotaskUsername)')",
-                          "Secret": "@parameters('Autotask API secret (new_AutotaskSecret)')",
-                          "ApiIntegrationCode": "@parameters('Autotask integration code (new_AutotaskIntegrationCode)')",
-                          "Content-Type": "application/json"
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_new-5fwsautotask-5f7e14506b88214820",
+                          "operationId": "UpdateConfigurationItem",
+                          "connectionName": "shared_new-5fwsautotask-5f7e14506b88214820"
                         },
-                        "body": {
-                          "id": "@int(items('Foreach_Batch')?['psa'])",
-                          "warrantyExpirationDate": "@items('Foreach_Batch')?['target']"
+                        "parameters": {
+                          "body/id": "@int(items('Foreach_Batch')?['psa'])",
+                          "body/warrantyExpirationDate": "@items('Foreach_Batch')?['target']"
                         }
                       },
-                      "runAfter": {},
-                      "runtimeConfiguration": {
-                        "secureData": {
-                          "properties": [
-                            "inputs"
-                          ]
-                        }
-                      }
+                      "runAfter": {}
                     }
                   },
                   "else": {
