@@ -6,7 +6,7 @@
   <displayname default="Max writes per run">
     <label description="Max writes per run" languagecode="1033" />
   </displayname>
-  <introducedversion>1.0.0.8</introducedversion>
+  <introducedversion>1.0.0.9</introducedversion>
   <iscustomizable>1</iscustomizable>
   <isrequired>0</isrequired>
   <secretstore>0</secretstore>

@@ -18,7 +18,7 @@
       <StatusCode>1</StatusCode>
       <RunAs>1</RunAs>
       <IsTransacted>1</IsTransacted>
-      <IntroducedVersion>1.0.0.8</IntroducedVersion>
+      <IntroducedVersion>1.0.0.9</IntroducedVersion>
       <IsCustomizable>1</IsCustomizable>
       <IsCustomProcessingStepAllowedForOtherPublishers>1</IsCustomProcessingStepAllowedForOtherPublishers>
       <ModernFlowType>0</ModernFlowType>
@@ -43,7 +43,7 @@
       <StatusCode>1</StatusCode>
       <RunAs>1</RunAs>
       <IsTransacted>1</IsTransacted>
-      <IntroducedVersion>1.0.0.8</IntroducedVersion>
+      <IntroducedVersion>1.0.0.9</IntroducedVersion>
       <IsCustomizable>1</IsCustomizable>
       <IsCustomProcessingStepAllowedForOtherPublishers>1</IsCustomProcessingStepAllowedForOtherPublishers>
       <ModernFlowType>0</ModernFlowType>
@@ -68,13 +68,38 @@
       <StatusCode>1</StatusCode>
       <RunAs>1</RunAs>
       <IsTransacted>1</IsTransacted>
-      <IntroducedVersion>1.0.0.8</IntroducedVersion>
+      <IntroducedVersion>1.0.0.9</IntroducedVersion>
       <IsCustomizable>1</IsCustomizable>
       <IsCustomProcessingStepAllowedForOtherPublishers>1</IsCustomProcessingStepAllowedForOtherPublishers>
       <ModernFlowType>0</ModernFlowType>
       <PrimaryEntity>none</PrimaryEntity>
       <LocalizedNames>
         <LocalizedName languagecode="1033" description="Warranty Sync - Datto RMM Only" />
+      </LocalizedNames>
+    </Workflow>
+    <Workflow WorkflowId="{5a8c2e47-d13b-4f6a-9c70-3b1e6d8f2a95}" Name="Warranty Sync - List Devices">
+      <JsonFileName>/Workflows/WarrantySync-ListDevices-5A8C2E47-D13B-4F6A-9C70-3B1E6D8F2A95.json</JsonFileName>
+      <Type>1</Type>
+      <Subprocess>0</Subprocess>
+      <Category>5</Category>
+      <Mode>0</Mode>
+      <Scope>4</Scope>
+      <OnDemand>0</OnDemand>
+      <TriggerOnCreate>0</TriggerOnCreate>
+      <TriggerOnDelete>0</TriggerOnDelete>
+      <AsyncAutodelete>0</AsyncAutodelete>
+      <SyncWorkflowLogOnFailure>0</SyncWorkflowLogOnFailure>
+      <StateCode>0</StateCode>
+      <StatusCode>1</StatusCode>
+      <RunAs>1</RunAs>
+      <IsTransacted>1</IsTransacted>
+      <IntroducedVersion>1.0.0.9</IntroducedVersion>
+      <IsCustomizable>1</IsCustomizable>
+      <IsCustomProcessingStepAllowedForOtherPublishers>1</IsCustomProcessingStepAllowedForOtherPublishers>
+      <ModernFlowType>0</ModernFlowType>
+      <PrimaryEntity>none</PrimaryEntity>
+      <LocalizedNames>
+        <LocalizedName languagecode="1033" description="Warranty Sync - List Devices" />
       </LocalizedNames>
     </Workflow>
   </Workflows>

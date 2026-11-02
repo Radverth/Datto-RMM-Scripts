@@ -5,7 +5,7 @@
   <displayname default="myITProcess attribute name">
     <label description="myITProcess attribute name" languagecode="1033" />
   </displayname>
-  <introducedversion>1.0.0.8</introducedversion>
+  <introducedversion>1.0.0.9</introducedversion>
   <iscustomizable>1</iscustomizable>
   <isrequired>1</isrequired>
   <secretstore>0</secretstore>

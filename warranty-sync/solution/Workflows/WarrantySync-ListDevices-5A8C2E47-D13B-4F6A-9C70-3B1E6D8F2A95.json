@@ -1,0 +1,403 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "new_sharedoffice365_wsync"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      },
+      "shared_new-5fwsitglue-5f7e14506b88214820": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "new_shared5fwsitglue5f7e14506b88214820_wsync"
+        },
+        "api": {
+          "name": "shared_new-5fwsitglue-5f7e14506b88214820",
+          "logicalName": "new_5Fwsitglue"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "IT Glue Laptop type ID (new_LaptopTypeId)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "new_LaptopTypeId"
+          }
+        },
+        "IT Glue Desktop type ID (new_DesktopTypeId)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "new_DesktopTypeId"
+          }
+        },
+        "IT Glue Active status ID (new_ActiveStatusId)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "new_ActiveStatusId"
+          }
+        },
+        "myITProcess attribute name (new_MyITPAttribute)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "new_MyITPAttribute"
+          }
+        },
+        "Summary email recipient (new_NotifyEmail)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "new_NotifyEmail"
+          }
+        }
+      },
+      "triggers": {
+        "manual": {
+          "type": "Request",
+          "kind": "Button",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "required": [],
+              "properties": {
+                "Search": {
+                  "title": "Search (blank = all)",
+                  "type": "string",
+                  "x-ms-dynamically-added": true,
+                  "description": "Text to look for in organisation, device name, serial, IT Glue ID, rmm-id or psa-id.",
+                  "x-ms-content-hint": "TEXT"
+                },
+                "TestReadyOnly": {
+                  "title": "Test-ready only",
+                  "type": "boolean",
+                  "x-ms-dynamically-added": true,
+                  "description": "Yes = only devices with an rmm-id, a psa-id and a myITProcess date.",
+                  "x-ms-content-hint": "BOOLEAN"
+                }
+              }
+            }
+          }
+        }
+      },
+      "actions": {
+        "Init_Devices": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "Devices",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {}
+        },
+        "Init_Page": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "Page",
+                "type": "integer",
+                "value": 1
+              }
+            ]
+          },
+          "runAfter": {
+            "Init_Devices": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Init_PageCount": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "PageCount",
+                "type": "integer",
+                "value": 0
+              }
+            ]
+          },
+          "runAfter": {
+            "Init_Page": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Compose_Search": {
+          "type": "Compose",
+          "inputs": "@toLower(trim(string(coalesce(triggerBody()?['Search'], ''))))",
+          "runAfter": {
+            "Init_PageCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Compose_TypeIds": {
+          "type": "Compose",
+          "inputs": "@createArray(parameters('IT Glue Laptop type ID (new_LaptopTypeId)'), parameters('IT Glue Desktop type ID (new_DesktopTypeId)'))",
+          "runAfter": {
+            "Compose_Search": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Foreach_Type": {
+          "type": "Foreach",
+          "foreach": "@outputs('Compose_TypeIds')",
+          "actions": {
+            "Reset_Page": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "Page",
+                "value": 1
+              },
+              "runAfter": {}
+            },
+            "Page_until_short": {
+              "type": "Until",
+              "expression": "@less(variables('PageCount'), 1000)",
+              "limit": {
+                "count": 100,
+                "timeout": "PT3H"
+              },
+              "actions": {
+                "Get_IT_Glue_page": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_new-5fwsitglue-5f7e14506b88214820",
+                      "operationId": "ListConfigurations",
+                      "connectionName": "shared_new-5fwsitglue-5f7e14506b88214820"
+                    },
+                    "parameters": {
+                      "typeId": "@{items('Foreach_Type')}",
+                      "statusId": "@{parameters('IT Glue Active status ID (new_ActiveStatusId)')}",
+                      "pageSize": "1000",
+                      "pageNumber": "@{variables('Page')}"
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "Select_Clean": {
+                  "type": "Select",
+                  "inputs": {
+                    "from": "@body('Get_IT_Glue_page')?['data']",
+                    "select": {
+                      "id": "@item()?['id']",
+                      "org": "@item()?['attributes']?['organization-name']",
+                      "name": "@item()?['attributes']?['name']",
+                      "serial": "@item()?['attributes']?['serial-number']",
+                      "rmm": "@string(coalesce(item()?['attributes']?['rmm-id'], ''))",
+                      "psa": "@string(coalesce(item()?['attributes']?['psa-id'], ''))",
+                      "glue": "@take(string(coalesce(item()?['attributes']?['warranty-expires-at'], '')), 10)",
+                      "mitp": "@take(string(coalesce(item()?['attributes']?[parameters('myITProcess attribute name (new_MyITPAttribute)')], '')), 10)"
+                    }
+                  },
+                  "runAfter": {
+                    "Get_IT_Glue_page": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Set_PageCount": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "PageCount",
+                    "value": "@length(body('Get_IT_Glue_page')?['data'])"
+                  },
+                  "runAfter": {
+                    "Select_Clean": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Compose_Merged": {
+                  "type": "Compose",
+                  "inputs": "@union(variables('Devices'), body('Select_Clean'))",
+                  "runAfter": {
+                    "Set_PageCount": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Merge_Devices": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "Devices",
+                    "value": "@outputs('Compose_Merged')"
+                  },
+                  "runAfter": {
+                    "Compose_Merged": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Next_page": {
+                  "type": "IncrementVariable",
+                  "inputs": {
+                    "name": "Page",
+                    "value": 1
+                  },
+                  "runAfter": {
+                    "Merge_Devices": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Reset_Page": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runtimeConfiguration": {
+            "concurrency": {
+              "repetitions": 1
+            }
+          },
+          "runAfter": {
+            "Compose_TypeIds": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Select_Decided": {
+          "type": "Select",
+          "inputs": {
+            "from": "@variables('Devices')",
+            "select": {
+              "id": "@item()?['id']",
+              "org": "@item()?['org']",
+              "name": "@item()?['name']",
+              "serial": "@item()?['serial']",
+              "rmm": "@item()?['rmm']",
+              "psa": "@item()?['psa']",
+              "glue": "@item()?['glue']",
+              "mitp": "@item()?['mitp']",
+              "target": "@if(empty(item()?['mitp']), item()?['glue'], if(or(empty(item()?['glue']), less(item()?['glue'], item()?['mitp'])), item()?['mitp'], item()?['glue']))",
+              "later": "@and(not(empty(item()?['mitp'])), greater(item()?['glue'], item()?['mitp']))"
+            }
+          },
+          "runAfter": {
+            "Foreach_Type": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_List": {
+          "type": "Query",
+          "inputs": {
+            "from": "@body('Select_Decided')",
+            "where": "@and(or(empty(outputs('Compose_Search')), contains(toLower(concat(coalesce(item()?['org'], ''), '|', coalesce(item()?['name'], ''), '|', coalesce(item()?['serial'], ''), '|', item()?['id'], '|', item()?['rmm'], '|', item()?['psa'])), outputs('Compose_Search'))), or(not(equals(triggerBody()?['TestReadyOnly'], true)), and(not(empty(item()?['rmm'])), not(empty(item()?['psa'])), not(empty(item()?['mitp'])))))"
+          },
+          "runAfter": {
+            "Select_Decided": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Select_List": {
+          "type": "Select",
+          "inputs": {
+            "from": "@body('Filter_List')",
+            "select": {
+              "Organisation": "@item()?['org']",
+              "Device": "@item()?['name']",
+              "Serial": "@item()?['serial']",
+              "ITGlueID": "@item()?['id']",
+              "RmmId": "@item()?['rmm']",
+              "PsaId": "@item()?['psa']",
+              "ITGlueDate": "@item()?['glue']",
+              "MyITPDate": "@item()?['mitp']",
+              "SyncDate": "@item()?['target']",
+              "Notes": "@concat(if(empty(item()?['rmm']), 'no rmm-id; ', ''), if(empty(item()?['psa']), 'no psa-id; ', ''), if(empty(item()?['mitp']), 'no myITProcess date; ', ''), if(item()?['later'], 'IT Glue later than myITProcess - review; ', ''), if(and(not(empty(item()?['target'])), not(equals(item()?['target'], item()?['glue']))), 'IT Glue date will change; ', ''), if(and(not(empty(item()?['rmm'])), not(empty(item()?['psa'])), not(empty(item()?['mitp']))), 'test-ready', ''))"
+            }
+          },
+          "runAfter": {
+            "Filter_List": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Devices_table": {
+          "type": "Table",
+          "inputs": {
+            "from": "@take(body('Select_List'), 300)",
+            "format": "HTML"
+          },
+          "runAfter": {
+            "Select_List": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Devices_csv": {
+          "type": "Table",
+          "inputs": {
+            "from": "@body('Select_List')",
+            "format": "CSV"
+          },
+          "runAfter": {
+            "Devices_table": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Send_list": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_office365",
+              "operationId": "SendEmailV2",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+            },
+            "parameters": {
+              "emailMessage/To": "@parameters('Summary email recipient (new_NotifyEmail)')",
+              "emailMessage/Subject": "Warranty Sync - IT Glue device list (@{length(body('Filter_List'))} devices)",
+              "emailMessage/Body": "<p>IT Glue active laptops and desktops.</p><ul><li>Search: @{if(empty(outputs('Compose_Search')), '(none)', outputs('Compose_Search'))}</li><li>Test-ready only: @{if(equals(triggerBody()?['TestReadyOnly'], true), 'Yes', 'No')}</li><li>Devices read: @{length(body('Select_Decided'))}</li><li>Matching: @{length(body('Filter_List'))}</li></ul><p><b>test-ready</b> = has an rmm-id, a psa-id and a myITProcess date, so every flow can be tested on it. Use the ITGlueID, RmmId, PsaId, serial or name as the <b>Device</b> input of the Autotask Only or Datto RMM Only flow.</p><p>@{if(greater(length(body('Filter_List')), 300), 'First 300 shown; all matches are in the attached CSV.', 'All matches are also in the attached CSV.')}</p>@{body('Devices_table')}",
+              "emailMessage/Attachments": [
+                {
+                  "Name": "itglue-devices.csv",
+                  "ContentBytes": "@{base64(body('Devices_csv'))}"
+                }
+              ],
+              "emailMessage/Importance": "Normal"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Devices_csv": [
+              "Succeeded"
+            ]
+          }
+        }
+      }
+    },
+    "templateName": null
+  },
+  "schemaVersion": "1.0.0.0"
+}

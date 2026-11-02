@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the importable Power Automate solution (WarrantySync_1_0_0_8.zip).
+"""Generate the importable Power Automate solution (WarrantySync_1_0_0_9.zip).
 
 Run:  python3 warranty-sync/build/build_solution.py
 Writes the unpacked source to warranty-sync/solution/ and the zip to warranty-sync/.
@@ -10,7 +10,7 @@ from xml.sax.saxutils import escape, quoteattr
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.dirname(HERE)
 SRC = os.path.join(OUT, "solution")
-ZIP = os.path.join(OUT, "WarrantySync_1_0_0_8.zip")
+ZIP = os.path.join(OUT, "WarrantySync_1_0_0_9.zip")
 
 PREFIX = "new"  # matches the environment default publisher (see PUBLISHER below)
 WF_ID = "7b1d3a52-4c6e-4f0a-9a37-2d5e8c1f0b64"
@@ -497,10 +497,89 @@ dt_flow = single_system_flow(
                             "inputs": {"variables": [{"name": "DattoToken", "type": "string",
                                                       "value": "@{body('Get_Datto_token')?['access_token']}"}]}}})
 
+# ---- List Devices: read-only report to pick test devices -------------------------------------------
+LS_WF_ID = "5a8c2e47-d13b-4f6a-9c70-3b1e6d8f2a95"
+search = "outputs('Compose_Search')"
+haystack = ("toLower(concat(coalesce(item()?['org'], ''), '|', coalesce(item()?['name'], ''), '|', "
+            "coalesce(item()?['serial'], ''), '|', item()?['id'], '|', item()?['rmm'], '|', item()?['psa']))")
+list_filter = ("and(or(empty({s}), contains({h}, {s})), or(not(equals(triggerBody()?['TestReadyOnly'], true)), "
+               "and(not(empty(item()?['rmm'])), not(empty(item()?['psa'])), not(empty(item()?['mitp'])))))").format(s=search, h=haystack)
+list_columns = {
+    "Organisation": "@item()?['org']", "Device": "@item()?['name']", "Serial": "@item()?['serial']",
+    "ITGlueID": "@item()?['id']", "RmmId": "@item()?['rmm']", "PsaId": "@item()?['psa']",
+    "ITGlueDate": "@item()?['glue']", "MyITPDate": "@item()?['mitp']", "SyncDate": "@item()?['target']",
+    "Notes": ("@concat(if(empty(item()?['rmm']), 'no rmm-id; ', ''), if(empty(item()?['psa']), 'no psa-id; ', ''), "
+              "if(empty(item()?['mitp']), 'no myITProcess date; ', ''), "
+              "if(item()?['later'], 'IT Glue later than myITProcess - review; ', ''), "
+              "if(and(not(empty(item()?['target'])), not(equals(item()?['target'], item()?['glue']))), 'IT Glue date will change; ', ''), "
+              "if(and(not(empty(item()?['rmm'])), not(empty(item()?['psa'])), not(empty(item()?['mitp']))), 'test-ready', ''))"),
+}
+list_summary = ("<p>IT Glue active laptops and desktops.</p><ul>"
+    "<li>Search: @{if(empty(outputs('Compose_Search')), '(none)', outputs('Compose_Search'))}</li>"
+    "<li>Test-ready only: @{if(equals(triggerBody()?['TestReadyOnly'], true), 'Yes', 'No')}</li>"
+    "<li>Devices read: @{length(body('Select_Decided'))}</li>"
+    "<li>Matching: @{length(body('Filter_List'))}</li></ul>"
+    "<p><b>test-ready</b> = has an rmm-id, a psa-id and a myITProcess date, so every flow can be tested on it. "
+    "Use the ITGlueID, RmmId, PsaId, serial or name as the <b>Device</b> input of the Autotask Only or Datto RMM Only flow.</p>"
+    "<p>@{if(greater(length(body('Filter_List')), 300), 'First 300 shown; all matches are in the attached CSV.', 'All matches are also in the attached CSV.')}</p>"
+    "@{body('Devices_table')}")
+
+ls_actions = {
+    "Init_Devices": {"type": "InitializeVariable", "inputs": {"variables": [{"name": "Devices", "type": "array", "value": []}]}},
+    "Init_Page": {"type": "InitializeVariable", "inputs": {"variables": [{"name": "Page", "type": "integer", "value": 1}]}},
+    "Init_PageCount": {"type": "InitializeVariable", "inputs": {"variables": [{"name": "PageCount", "type": "integer", "value": 0}]}},
+    "Compose_Search": {"type": "Compose", "inputs": "@toLower(trim(string(coalesce(triggerBody()?['Search'], ''))))"},
+    "Compose_TypeIds": {"type": "Compose", "inputs": "@createArray(%s, %s)" % (P("LaptopTypeId"), P("DesktopTypeId"))},
+    "Foreach_Type": {"type": "Foreach", "foreach": "@outputs('Compose_TypeIds')",
+                     "actions": json.loads(json.dumps(foreach_type_actions)),
+                     "runtimeConfiguration": {"concurrency": {"repetitions": 1}}},
+    "Select_Decided": {"type": "Select", "inputs": {"from": "@variables('Devices')", "select": decided}},
+    "Filter_List": {"type": "Query", "inputs": {"from": "@body('Select_Decided')", "where": "@" + list_filter}},
+    "Select_List": {"type": "Select", "inputs": {"from": "@body('Filter_List')", "select": list_columns}},
+    "Devices_table": {"type": "Table", "inputs": {"from": "@take(body('Select_List'), 300)", "format": "HTML"}},
+    "Devices_csv": {"type": "Table", "inputs": {"from": "@body('Select_List')", "format": "CSV"}},
+    "Send_list": {"type": "OpenApiConnection", "inputs": {
+        "host": {"connectionName": "shared_office365", "operationId": "SendEmailV2", "apiId": O365_API},
+        "parameters": {"emailMessage/To": "@" + P("NotifyEmail"),
+                       "emailMessage/Subject": "Warranty Sync - IT Glue device list (@{length(body('Filter_List'))} devices)",
+                       "emailMessage/Body": list_summary,
+                       "emailMessage/Attachments": [{"Name": "itglue-devices.csv", "ContentBytes": "@{base64(body('Devices_csv'))}"}],
+                       "emailMessage/Importance": "Normal"},
+        "authentication": "@parameters('$authentication')"}},
+}
+ls_order = ["Init_Devices", "Init_Page", "Init_PageCount", "Compose_Search", "Compose_TypeIds", "Foreach_Type",
+            "Select_Decided", "Filter_List", "Select_List", "Devices_table", "Devices_csv", "Send_list"]
+prev = None
+for n in ls_order:
+    ls_actions[n]["runAfter"] = {prev: ["Succeeded"]} if prev else {}
+    prev = n
+ls_params = {"$connections": {"defaultValue": {}, "type": "Object"},
+             "$authentication": {"defaultValue": {}, "type": "SecureObject"}}
+for k in ["LaptopTypeId", "DesktopTypeId", "ActiveStatusId", "MyITPAttribute", "NotifyEmail"]:
+    ls_params["%s (%s_%s)" % (ENV[k][0], PREFIX, k)] = env_param(k)
+ls_flow = {"properties": {
+    "connectionReferences": {
+        "shared_office365": {"runtimeSource": "embedded", "connection": {"connectionReferenceLogicalName": PREFIX + "_sharedoffice365_wsync"},
+                             "api": {"name": "shared_office365"}},
+        CONNECTORS["itglue"]["api"]: ref(CONNECTORS["itglue"])},
+    "definition": {"$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                   "contentVersion": "1.0.0.0", "parameters": ls_params,
+                   "triggers": {"manual": {"type": "Request", "kind": "Button", "inputs": {"schema": {
+                       "type": "object", "required": [], "properties": {
+                           "Search": {"title": "Search (blank = all)", "type": "string", "x-ms-dynamically-added": True,
+                                      "description": "Text to look for in organisation, device name, serial, IT Glue ID, rmm-id or psa-id.",
+                                      "x-ms-content-hint": "TEXT"},
+                           "TestReadyOnly": {"title": "Test-ready only", "type": "boolean", "x-ms-dynamically-added": True,
+                                             "description": "Yes = only devices with an rmm-id, a psa-id and a myITProcess date.",
+                                             "x-ms-content-hint": "BOOLEAN"}}}}}},
+                   "actions": ls_actions},
+    "templateName": None}, "schemaVersion": "1.0.0.0"}
+
 FLOWS = [
     {"id": WF_ID, "name": FLOW_NAME, "file": "/Workflows/WarrantySync-Nightly-%s.json" % WF_ID.upper(), "flow": flow},
     {"id": AT_WF_ID, "name": "Warranty Sync - Autotask Only", "file": "/Workflows/WarrantySync-AutotaskOnly-%s.json" % AT_WF_ID.upper(), "flow": at_flow},
     {"id": DT_WF_ID, "name": "Warranty Sync - Datto RMM Only", "file": "/Workflows/WarrantySync-DattoRMMOnly-%s.json" % DT_WF_ID.upper(), "flow": dt_flow},
+    {"id": LS_WF_ID, "name": "Warranty Sync - List Devices", "file": "/Workflows/WarrantySync-ListDevices-%s.json" % LS_WF_ID.upper(), "flow": ls_flow},
 ]
 
 # ---- solution files ---------------------------------------------------------------------------
@@ -508,7 +587,7 @@ FLOWS = [
 # environment (AutotaskaBillitySync_1_0_0_13.zip), which is known to import.
 ORGVER = 'OrganizationVersion="9.2.26102.127" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26102.00127"'
 PUBLISHER = ("DefaultPublisherorgda80817a", "Default Publisher for orgda80817a", "Default publisher for this organization")
-VERSION = "1.0.0.8"
+VERSION = "1.0.0.9"
 
 def write(path, text, bom=False):
     full = os.path.join(SRC, path); os.makedirs(os.path.dirname(full), exist_ok=True)
