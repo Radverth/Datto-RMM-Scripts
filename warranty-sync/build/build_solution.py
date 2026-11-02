@@ -301,8 +301,15 @@ for k, (disp, dflt, req, desc) in ENV.items():
           lbl("displayname", disp), lbl("description", desc or disp)))
 
 if os.path.exists(ZIP): os.remove(ZIP)
+names = []
+for root, _, files in os.walk(SRC):
+    for f in files:
+        names.append(os.path.relpath(os.path.join(root, f), SRC).replace(os.sep, "/"))
+# [Content_Types].xml first, then solution.xml, customizations.xml, rest sorted (matches a real export)
+first = ["[Content_Types].xml", "solution.xml", "customizations.xml"]
+names = first + sorted(n for n in names if n not in first)
 with zipfile.ZipFile(ZIP, "w", zipfile.ZIP_DEFLATED) as z:
-    for root, _, files in os.walk(SRC):
-        for f in sorted(files):
-            full = os.path.join(root, f); z.write(full, os.path.relpath(full, SRC).replace(os.sep, "/"))
+    for n in names:
+        zi = zipfile.ZipInfo(n, date_time=(2026, 11, 2, 0, 0, 0)); zi.compress_type = zipfile.ZIP_DEFLATED
+        with open(os.path.join(SRC, n), "rb") as fh: z.writestr(zi, fh.read())
 print("wrote", ZIP)
