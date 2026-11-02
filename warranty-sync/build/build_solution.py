@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the importable Power Automate solution (WarrantySync_1_0_0_11.zip).
+"""Generate the importable Power Automate solution (WarrantySync_1_0_0_12.zip).
 
 Run:  python3 warranty-sync/build/build_solution.py
 Writes the unpacked source to warranty-sync/solution/ and the zip to warranty-sync/.
@@ -10,7 +10,7 @@ from xml.sax.saxutils import escape, quoteattr
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.dirname(HERE)
 SRC = os.path.join(OUT, "solution")
-ZIP = os.path.join(OUT, "WarrantySync_1_0_0_11.zip")
+ZIP = os.path.join(OUT, "WarrantySync_1_0_0_12.zip")
 
 PREFIX = "new"  # matches the environment default publisher (see PUBLISHER below)
 WF_ID = "7b1d3a52-4c6e-4f0a-9a37-2d5e8c1f0b64"
@@ -235,7 +235,7 @@ sc_glue = {"type": "Scope", "actions": {"If_glue_changed": cond(
 sc_datto = {"type": "Scope", "actions": {"If_rmm_present": cond(
     "and(%s, not(empty(%s?['rmm'])))" % (live, IT),
     {"Datto_write": cc("datto", "SetDeviceWarranty", {"deviceUid": "@{%s?['rmm']}" % IT,
-        "Authorization": "Bearer @{variables('DattoToken')}", "body/warrantyDate": "@%s?['target']" % IT}, secure=("inputs",))})}}
+        "Authorization": "Bearer @{body('Get_Datto_token')?['access_token']}", "body/warrantyDate": "@%s?['target']" % IT}, secure=("inputs",))})}}
 sc_at = {"type": "Scope", "actions": {"If_psa_present": cond(
     "and(%s, %s, not(empty(%s?['psa'])))" % (live, at_on, IT),
     {"Autotask_write": cc("autotask", "UpdateConfigurationItem", {"body/id": "@int(%s?['psa'])" % IT,
@@ -298,13 +298,11 @@ actions = {
     "Init_Devices": {"type": "InitializeVariable", "inputs": {"variables": [{"name": "Devices", "type": "array", "value": []}]}},
     "Init_Page": {"type": "InitializeVariable", "inputs": {"variables": [{"name": "Page", "type": "integer", "value": 1}]}},
     "Init_PageCount": {"type": "InitializeVariable", "inputs": {"variables": [{"name": "PageCount", "type": "integer", "value": 0}]}},
-    "Init_DattoToken": {"type": "InitializeVariable", "inputs": {"variables": [{"name": "DattoToken", "type": "string", "value": ""}]}},
     "Compose_TypeIds": {"type": "Compose", "inputs": "@createArray(%s, %s)" % (P("LaptopTypeId"), P("DesktopTypeId"))},
     "If_live_get_token": cond(live, {
-        "Get_Datto_token": cc("datto", "GetToken", {}, secure=("inputs", "outputs")),
-        "Set_DattoToken": {"type": "SetVariable", "inputs": {"name": "DattoToken", "value": "@body('Get_Datto_token')?['access_token']"},
-                           "runAfter": {"Get_Datto_token": ["Succeeded"]},
-                           "runtimeConfiguration": {"secureData": {"properties": ["inputs", "outputs"]}}}}),
+        # the token is read straight from this action (secure outputs) by the Datto actions, which have
+        # secure inputs; it is never put in a variable, as variable actions can't hide their values
+        "Get_Datto_token": cc("datto", "GetToken", {}, secure=("inputs", "outputs"))}),
     "Foreach_Type": {"type": "Foreach", "foreach": "@outputs('Compose_TypeIds')", "actions": foreach_type_actions,
                      "runtimeConfiguration": {"concurrency": {"repetitions": 1}}},
     "Select_Decided": {"type": "Select", "inputs": {"from": "@variables('Devices')", "select": decided}},
@@ -330,7 +328,7 @@ for n in ("Get_State_items", "Get_run_rows"):
     # 5,000 is the most SharePoint "Get items" will page to on this licence
     actions[n]["runtimeConfiguration"] = {"paginationPolicy": {"minimumItemCount": 5000}}
 # top-level chain. Foreach_Batch / summary run regardless of per-device failures.
-order = ["Init_RunStart", "Init_Devices", "Init_Page", "Init_PageCount", "Init_DattoToken", "Compose_TypeIds",
+order = ["Init_RunStart", "Init_Devices", "Init_Page", "Init_PageCount", "Compose_TypeIds",
          "If_live_get_token", "Foreach_Type", "Select_Decided", "Get_State_items", "Select_State", "StateString",
          "Filter_ToPush", "Compose_Batch", "Foreach_Batch", "Get_run_rows", "Filter_Errors", "Send_summary"]
 prev = None
@@ -491,16 +489,13 @@ DT_WF_ID = "9e3a5c71-0b4d-4f28-a6e1-7d2c8b5f4a19"
 dt_flow = single_system_flow(
     "Datto RMM", "rmm", "rmm-id", "datto",
     get_action=cc("datto", "GetDevice", {"deviceUid": "@{%s?['rmm']}" % ONE,
-        "Authorization": "Bearer @{variables('DattoToken')}"}, secure=("inputs",)),
+        "Authorization": "Bearer @{body('Get_Datto_token')?['access_token']}"}, secure=("inputs",)),
     current_expr="take(string(coalesce(body('Get_Current')?['warrantyDate'], '')), 10)",
     write_action=cc("datto", "SetDeviceWarranty", {"deviceUid": "@{%s?['rmm']}" % ONE,
-        "Authorization": "Bearer @{variables('DattoToken')}", "body/warrantyDate": "@%s?['target']" % ONE}, secure=("inputs",)),
+        "Authorization": "Bearer @{body('Get_Datto_token')?['access_token']}", "body/warrantyDate": "@%s?['target']" % ONE}, secure=("inputs",)),
     # the token is needed to read devices, so it is fetched even in dry run
     pre_actions={
-        "Get_Datto_token": cc("datto", "GetToken", {}, secure=("inputs", "outputs")),
-        "Init_DattoToken": {"type": "InitializeVariable", "runtimeConfiguration": {"secureData": {"properties": ["inputs", "outputs"]}},
-                            "inputs": {"variables": [{"name": "DattoToken", "type": "string",
-                                                      "value": "@{body('Get_Datto_token')?['access_token']}"}]}}})
+        "Get_Datto_token": cc("datto", "GetToken", {}, secure=("inputs", "outputs"))})
 
 # ---- List Devices: read-only report to pick test devices -------------------------------------------
 LS_WF_ID = "5a8c2e47-d13b-4f6a-9c70-3b1e6d8f2a95"
@@ -592,7 +587,7 @@ FLOWS = [
 # environment (AutotaskaBillitySync_1_0_0_13.zip), which is known to import.
 ORGVER = 'OrganizationVersion="9.2.26102.127" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26102.00127"'
 PUBLISHER = ("DefaultPublisherorgda80817a", "Default Publisher for orgda80817a", "Default publisher for this organization")
-VERSION = "1.0.0.11"
+VERSION = "1.0.0.12"
 
 def write(path, text, bom=False):
     full = os.path.join(SRC, path); os.makedirs(os.path.dirname(full), exist_ok=True)

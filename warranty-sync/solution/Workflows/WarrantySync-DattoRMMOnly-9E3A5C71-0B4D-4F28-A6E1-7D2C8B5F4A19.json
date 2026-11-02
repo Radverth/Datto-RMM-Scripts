@@ -210,36 +210,11 @@
             }
           }
         },
-        "Init_DattoToken": {
-          "type": "InitializeVariable",
-          "runtimeConfiguration": {
-            "secureData": {
-              "properties": [
-                "inputs",
-                "outputs"
-              ]
-            }
-          },
-          "inputs": {
-            "variables": [
-              {
-                "name": "DattoToken",
-                "type": "string",
-                "value": "@{body('Get_Datto_token')?['access_token']}"
-              }
-            ]
-          },
-          "runAfter": {
-            "Get_Datto_token": [
-              "Succeeded"
-            ]
-          }
-        },
         "Compose_Device": {
           "type": "Compose",
           "inputs": "@toLower(trim(string(coalesce(triggerBody()?['Device'], ''))))",
           "runAfter": {
-            "Init_DattoToken": [
+            "Get_Datto_token": [
               "Succeeded"
             ]
           }
@@ -445,7 +420,7 @@
                 },
                 "parameters": {
                   "deviceUid": "@{items('Foreach_Device')?['rmm']}",
-                  "Authorization": "Bearer @{variables('DattoToken')}"
+                  "Authorization": "Bearer @{body('Get_Datto_token')?['access_token']}"
                 }
               },
               "runAfter": {},
@@ -503,7 +478,7 @@
                             },
                             "parameters": {
                               "deviceUid": "@{items('Foreach_Device')?['rmm']}",
-                              "Authorization": "Bearer @{variables('DattoToken')}",
+                              "Authorization": "Bearer @{body('Get_Datto_token')?['access_token']}",
                               "body/warrantyDate": "@items('Foreach_Device')?['target']"
                             }
                           },

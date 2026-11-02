@@ -216,28 +216,11 @@
             ]
           }
         },
-        "Init_DattoToken": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "DattoToken",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {
-            "Init_PageCount": [
-              "Succeeded"
-            ]
-          }
-        },
         "Compose_TypeIds": {
           "type": "Compose",
           "inputs": "@createArray(parameters('IT Glue Laptop type ID (new_LaptopTypeId)'), parameters('IT Glue Desktop type ID (new_DesktopTypeId)'))",
           "runAfter": {
-            "Init_DattoToken": [
+            "Init_PageCount": [
               "Succeeded"
             ]
           }
@@ -262,26 +245,6 @@
                 "parameters": {}
               },
               "runAfter": {},
-              "runtimeConfiguration": {
-                "secureData": {
-                  "properties": [
-                    "inputs",
-                    "outputs"
-                  ]
-                }
-              }
-            },
-            "Set_DattoToken": {
-              "type": "SetVariable",
-              "inputs": {
-                "name": "DattoToken",
-                "value": "@body('Get_Datto_token')?['access_token']"
-              },
-              "runAfter": {
-                "Get_Datto_token": [
-                  "Succeeded"
-                ]
-              },
               "runtimeConfiguration": {
                 "secureData": {
                   "properties": [
@@ -609,7 +572,7 @@
                         },
                         "parameters": {
                           "deviceUid": "@{items('Foreach_Batch')?['rmm']}",
-                          "Authorization": "Bearer @{variables('DattoToken')}",
+                          "Authorization": "Bearer @{body('Get_Datto_token')?['access_token']}",
                           "body/warrantyDate": "@items('Foreach_Batch')?['target']"
                         }
                       },
