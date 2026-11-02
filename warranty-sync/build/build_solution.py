@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the importable Power Automate solution (WarrantySync_1_0_0_1.zip).
+"""Generate the importable Power Automate solution (WarrantySync_1_0_0_2.zip).
 
 Run:  python3 warranty-sync/build/build_solution.py
 Writes the unpacked source to warranty-sync/solution/ and the zip to warranty-sync/.
@@ -10,7 +10,7 @@ from xml.sax.saxutils import escape, quoteattr
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.dirname(HERE)
 SRC = os.path.join(OUT, "solution")
-ZIP = os.path.join(OUT, "WarrantySync_1_0_0_1.zip")
+ZIP = os.path.join(OUT, "WarrantySync_1_0_0_2.zip")
 
 PREFIX = "new"  # matches the environment default publisher (see PUBLISHER below)
 WF_ID = "7b1d3a52-4c6e-4f0a-9a37-2d5e8c1f0b64"
@@ -71,12 +71,14 @@ CONNECTORS = {
   "desc": "IT Glue configurations: list and update warranty date.", "color": "#1f5fa6",
   "swagger": swagger("IT Glue (Warranty Sync)", "IT Glue configurations for the warranty sync", "api.itglue.com", "/", {
      "/configurations": {"get": {"responses": ANY, "summary": "List configurations", "operationId": "ListConfigurations",
+        "description": "Active, non-archived configurations of one type. Inputs are sent as headers and copied into "
+                       "IT Glue's filter[...] / page[...] query parameters by connector policies, because connector "
+                       "parameter names must be alphanumeric.",
         "parameters": [
-          {"name": "filter[configuration_type_id]", "in": "query", "required": False, "type": "string"},
-          {"name": "filter[configuration_status_id]", "in": "query", "required": False, "type": "string"},
-          {"name": "filter[archived]", "in": "query", "required": False, "type": "string"},
-          {"name": "page[size]", "in": "query", "required": False, "type": "integer"},
-          {"name": "page[number]", "in": "query", "required": False, "type": "integer"}]}},
+          {"name": "typeId", "in": "header", "required": True, "type": "string", "x-ms-summary": "Configuration type ID"},
+          {"name": "statusId", "in": "header", "required": True, "type": "string", "x-ms-summary": "Configuration status ID"},
+          {"name": "pageSize", "in": "header", "required": True, "type": "string", "default": "1000", "x-ms-summary": "Page size"},
+          {"name": "pageNumber", "in": "header", "required": True, "type": "string", "default": "1", "x-ms-summary": "Page number"}]}},
      "/configurations/{id}": {"patch": {"responses": ANY, "summary": "Update configuration", "operationId": "UpdateConfiguration",
         "parameters": [{"name": "id", "in": "path", "required": True, "type": "string"},
           {"name": "body", "in": "body", "required": True, "schema": {"type": "object", "properties": {
@@ -87,7 +89,12 @@ CONNECTORS = {
                  **conn_param("host", "IT Glue API host", "api.itglue.com (US), api.eu.itglue.com (EU) or api.au.itglue.com (AU)", False, 3)),
   "policies": [hosturl("https://@connectionParameters('host')", ["ListConfigurations", "UpdateConfiguration"]),
                setheader("Set accept", "Accept", "application/vnd.api+json", ["ListConfigurations", "UpdateConfiguration"]),
-               setheader("Set content type", "Content-Type", "application/vnd.api+json", ["UpdateConfiguration"])],
+               setheader("Set content type", "Content-Type", "application/vnd.api+json", ["UpdateConfiguration"]),
+               setquery("Set type filter", "filter[configuration_type_id]", "@headers('typeId')", ["ListConfigurations"]),
+               setquery("Set status filter", "filter[configuration_status_id]", "@headers('statusId')", ["ListConfigurations"]),
+               setquery("Set archived filter", "filter[archived]", "false", ["ListConfigurations"]),
+               setquery("Set page size", "page[size]", "@headers('pageSize')", ["ListConfigurations"]),
+               setquery("Set page number", "page[number]", "@headers('pageNumber')", ["ListConfigurations"])],
  },
  "datto": {
   "name": "new_5Fwsdattormm", "id": "8a4f2d6b-1c3e-4b7a-9d05-6e8f1a2b3c47", "display": "Datto RMM (Warranty Sync)",
@@ -173,9 +180,8 @@ def attr(name): return "item()?['attributes']?['%s']" % name
 
 until_actions = chain({
     "Get_IT_Glue_page": cc("itglue", "ListConfigurations", {
-        "filter[configuration_type_id]": "@{items('Foreach_Type')}",
-        "filter[configuration_status_id]": "@{%s}" % P("ActiveStatusId"),
-        "filter[archived]": "false", "page[size]": 1000, "page[number]": "@variables('Page')"}, secure=None),
+        "typeId": "@{items('Foreach_Type')}", "statusId": "@{%s}" % P("ActiveStatusId"),
+        "pageSize": "1000", "pageNumber": "@{variables('Page')}"}, secure=None),
     "Select_Clean": {"type": "Select", "inputs": {
         "from": "@body('Get_IT_Glue_page')?['data']",
         "select": {
@@ -341,7 +347,7 @@ flow = {"properties": {
 # environment (AutotaskaBillitySync_1_0_0_13.zip), which is known to import.
 ORGVER = 'OrganizationVersion="9.2.26102.127" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26102.00127"'
 PUBLISHER = ("DefaultPublisherorgda80817a", "Default Publisher for orgda80817a", "Default publisher for this organization")
-VERSION = "1.0.0.1"
+VERSION = "1.0.0.2"
 
 def write(path, text, bom=False):
     full = os.path.join(SRC, path); os.makedirs(os.path.dirname(full), exist_ok=True)

@@ -6,7 +6,7 @@
   <displayname default="Write Autotask">
     <label description="Write Autotask" languagecode="1033" />
   </displayname>
-  <introducedversion>1.0.0.1</introducedversion>
+  <introducedversion>1.0.0.2</introducedversion>
   <iscustomizable>1</iscustomizable>
   <isrequired>0</isrequired>
   <secretstore>0</secretstore>

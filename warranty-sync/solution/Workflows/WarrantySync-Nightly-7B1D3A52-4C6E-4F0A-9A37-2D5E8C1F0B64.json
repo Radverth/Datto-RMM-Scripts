@@ -330,11 +330,10 @@
                       "connectionName": "shared_new-5fwsitglue-5f7e14506b88214820"
                     },
                     "parameters": {
-                      "filter[configuration_type_id]": "@{items('Foreach_Type')}",
-                      "filter[configuration_status_id]": "@{parameters('IT Glue Active status ID (new_ActiveStatusId)')}",
-                      "filter[archived]": "false",
-                      "page[size]": 1000,
-                      "page[number]": "@variables('Page')"
+                      "typeId": "@{items('Foreach_Type')}",
+                      "statusId": "@{parameters('IT Glue Active status ID (new_ActiveStatusId)')}",
+                      "pageSize": "1000",
+                      "pageNumber": "@{variables('Page')}"
                     }
                   },
                   "runAfter": {}
