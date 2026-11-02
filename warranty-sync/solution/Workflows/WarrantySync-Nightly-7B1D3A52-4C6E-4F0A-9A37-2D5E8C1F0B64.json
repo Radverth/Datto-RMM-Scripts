@@ -550,8 +550,14 @@
                         },
                         "parameters": {
                           "id": "@{items('Foreach_Batch')?['id']}",
-                          "body/data/type": "configurations",
-                          "body/data/attributes/warranty-expires-at": "@items('Foreach_Batch')?['target']"
+                          "body": {
+                            "data": {
+                              "type": "configurations",
+                              "attributes": {
+                                "warranty-expires-at": "@items('Foreach_Batch')?['target']"
+                              }
+                            }
+                          }
                         }
                       },
                       "runAfter": {}

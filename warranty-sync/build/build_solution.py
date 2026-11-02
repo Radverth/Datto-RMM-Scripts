@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the importable Power Automate solution (WarrantySync_1_0_0_2.zip).
+"""Generate the importable Power Automate solution (WarrantySync_1_0_0_3.zip).
 
 Run:  python3 warranty-sync/build/build_solution.py
 Writes the unpacked source to warranty-sync/solution/ and the zip to warranty-sync/.
@@ -10,7 +10,7 @@ from xml.sax.saxutils import escape, quoteattr
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.dirname(HERE)
 SRC = os.path.join(OUT, "solution")
-ZIP = os.path.join(OUT, "WarrantySync_1_0_0_2.zip")
+ZIP = os.path.join(OUT, "WarrantySync_1_0_0_3.zip")
 
 PREFIX = "new"  # matches the environment default publisher (see PUBLISHER below)
 WF_ID = "7b1d3a52-4c6e-4f0a-9a37-2d5e8c1f0b64"
@@ -67,9 +67,9 @@ def swagger(title, desc, host, base, paths, security=None):
 
 CONNECTORS = {
  "itglue": {
-  "name": "new_5Fwsitglue", "id": "3e9c6a10-52b4-4d1f-8a7e-0c2b9f4d6e81", "display": "IT Glue (Warranty Sync)",
+  "name": "new_5Fwsitglue", "id": "3e9c6a10-52b4-4d1f-8a7e-0c2b9f4d6e81", "display": "ITGlueWarrantySync",
   "desc": "IT Glue configurations: list and update warranty date.", "color": "#1f5fa6",
-  "swagger": swagger("IT Glue (Warranty Sync)", "IT Glue configurations for the warranty sync", "api.itglue.com", "/", {
+  "swagger": swagger("ITGlueWarrantySync", "IT Glue configurations for the warranty sync", "api.itglue.com", "/", {
      "/configurations": {"get": {"responses": ANY, "summary": "List configurations", "operationId": "ListConfigurations",
         "description": "Active, non-archived configurations of one type. Inputs are sent as headers and copied into "
                        "IT Glue's filter[...] / page[...] query parameters by connector policies, because connector "
@@ -81,9 +81,8 @@ CONNECTORS = {
           {"name": "pageNumber", "in": "header", "required": True, "type": "string", "default": "1", "x-ms-summary": "Page number"}]}},
      "/configurations/{id}": {"patch": {"responses": ANY, "summary": "Update configuration", "operationId": "UpdateConfiguration",
         "parameters": [{"name": "id", "in": "path", "required": True, "type": "string"},
-          {"name": "body", "in": "body", "required": True, "schema": {"type": "object", "properties": {
-             "data": {"type": "object", "properties": {"type": {"type": "string", "default": "configurations"},
-               "attributes": {"type": "object", "properties": {"warranty-expires-at": {"type": "string", "description": "yyyy-MM-dd"}}}}}}}}]}}},
+          {"name": "body", "in": "body", "required": True, "schema": {"type": "object",
+             "description": "JSON:API body, e.g. data.type = configurations, data.attributes.warranty-expires-at = yyyy-MM-dd"}}]}}},
      security={"type": "apiKey", "in": "header", "name": "x-api-key"}),
   "params": dict(**conn_param("api_key", "IT Glue API key", "IT Glue API key with read/write on Configurations", True, 2),
                  **conn_param("host", "IT Glue API host", "api.itglue.com (US), api.eu.itglue.com (EU) or api.au.itglue.com (AU)", False, 3)),
@@ -97,13 +96,12 @@ CONNECTORS = {
                setquery("Set page number", "page[number]", "@headers('pageNumber')", ["ListConfigurations"])],
  },
  "datto": {
-  "name": "new_5Fwsdattormm", "id": "8a4f2d6b-1c3e-4b7a-9d05-6e8f1a2b3c47", "display": "Datto RMM (Warranty Sync)",
+  "name": "new_5Fwsdattormm", "id": "8a4f2d6b-1c3e-4b7a-9d05-6e8f1a2b3c47", "display": "DattoRMMWarrantySync",
   "desc": "Datto RMM API v2: get token and set device warranty date.", "color": "#0a6ebd",
-  "swagger": swagger("Datto RMM (Warranty Sync)", "Datto RMM API v2 for the warranty sync", "pinotage-api.centrastage.net", "/", {
+  "swagger": swagger("DattoRMMWarrantySync", "Datto RMM API v2 for the warranty sync", "pinotage-api.centrastage.net", "/", {
      "/auth/oauth/token": {"post": {"summary": "Get token", "operationId": "GetToken",
         "description": "Uses the API key and secret stored in the connection.", "parameters": [],
-        "responses": {"200": {"description": "OK", "schema": {"type": "object", "properties": {
-            "access_token": {"type": "string"}, "token_type": {"type": "string"}, "expires_in": {"type": "integer"}}}}}}},
+        "responses": ANY}},
      "/api/v2/device/{deviceUid}/warranty": {"post": {"responses": ANY, "summary": "Set device warranty", "operationId": "SetDeviceWarranty",
         "parameters": [{"name": "deviceUid", "in": "path", "required": True, "type": "string", "description": "Datto device UID (IT Glue rmm-id)"},
           {"name": "Authorization", "in": "header", "required": True, "type": "string", "description": "Bearer <access_token>"},
@@ -121,9 +119,9 @@ CONNECTORS = {
                setheader("Set content type", "Content-Type", "application/json", ["SetDeviceWarranty"])],
  },
  "autotask": {
-  "name": "new_5Fwsautotask", "id": "c51e7b38-9f2a-4e6d-b4c1-2d7a8e9f0b56", "display": "Autotask (Warranty Sync)",
+  "name": "new_5Fwsautotask", "id": "c51e7b38-9f2a-4e6d-b4c1-2d7a8e9f0b56", "display": "AutotaskWarrantySync",
   "desc": "Autotask REST API: update configuration item warranty date.", "color": "#e5622b",
-  "swagger": swagger("Autotask (Warranty Sync)", "Autotask REST API for the warranty sync", "webservices4.autotask.net", "/atservicesrest/V1.0", {
+  "swagger": swagger("AutotaskWarrantySync", "Autotask REST API for the warranty sync", "webservices4.autotask.net", "/atservicesrest/V1.0", {
      "/ConfigurationItems": {"patch": {"responses": ANY, "summary": "Update configuration item", "operationId": "UpdateConfigurationItem",
         "parameters": [{"name": "body", "in": "body", "required": True, "schema": {"type": "object", "properties": {
              "id": {"type": "integer", "format": "int64"}, "warrantyExpirationDate": {"type": "string", "description": "yyyy-MM-dd"}}}}]}}},
@@ -218,7 +216,7 @@ decided = {"id": "@item()?['id']", "org": "@item()?['org']", "name": "@item()?['
 sc_glue = {"type": "Scope", "actions": {"If_glue_changed": cond(
     "and(%s, not(equals(%s?['target'], %s?['glue'])))" % (live, IT, IT),
     {"ITGlue_write": cc("itglue", "UpdateConfiguration", {"id": "@{%s?['id']}" % IT,
-        "body/data/type": "configurations", "body/data/attributes/warranty-expires-at": "@%s?['target']" % IT}, secure=None)})}}
+        "body": {"data": {"type": "configurations", "attributes": {"warranty-expires-at": "@%s?['target']" % IT}}}}, secure=None)})}}
 sc_datto = {"type": "Scope", "actions": {"If_rmm_present": cond(
     "and(%s, not(empty(%s?['rmm'])))" % (live, IT),
     {"Datto_write": cc("datto", "SetDeviceWarranty", {"deviceUid": "@{%s?['rmm']}" % IT,
@@ -347,7 +345,7 @@ flow = {"properties": {
 # environment (AutotaskaBillitySync_1_0_0_13.zip), which is known to import.
 ORGVER = 'OrganizationVersion="9.2.26102.127" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26102.00127"'
 PUBLISHER = ("DefaultPublisherorgda80817a", "Default Publisher for orgda80817a", "Default publisher for this organization")
-VERSION = "1.0.0.2"
+VERSION = "1.0.0.3"
 
 def write(path, text, bom=False):
     full = os.path.join(SRC, path); os.makedirs(os.path.dirname(full), exist_ok=True)

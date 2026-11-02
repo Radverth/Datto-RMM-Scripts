@@ -18,7 +18,7 @@
       <StatusCode>1</StatusCode>
       <RunAs>1</RunAs>
       <IsTransacted>1</IsTransacted>
-      <IntroducedVersion>1.0.0.2</IntroducedVersion>
+      <IntroducedVersion>1.0.0.3</IntroducedVersion>
       <IsCustomizable>1</IsCustomizable>
       <IsCustomProcessingStepAllowedForOtherPublishers>1</IsCustomProcessingStepAllowedForOtherPublishers>
       <ModernFlowType>0</ModernFlowType>
@@ -40,7 +40,7 @@
     <Connector>
       <connectorid>3e9c6a10-52b4-4d1f-8a7e-0c2b9f4d6e81</connectorid>
       <description>IT Glue configurations: list and update warranty date.</description>
-      <displayname>IT Glue (Warranty Sync)</displayname>
+      <displayname>ITGlueWarrantySync</displayname>
       <iconbrandcolor>#1f5fa6</iconbrandcolor>
       <name>new_5Fwsitglue</name>
       <connectortype>1</connectortype>
@@ -52,7 +52,7 @@
     <Connector>
       <connectorid>8a4f2d6b-1c3e-4b7a-9d05-6e8f1a2b3c47</connectorid>
       <description>Datto RMM API v2: get token and set device warranty date.</description>
-      <displayname>Datto RMM (Warranty Sync)</displayname>
+      <displayname>DattoRMMWarrantySync</displayname>
       <iconbrandcolor>#0a6ebd</iconbrandcolor>
       <name>new_5Fwsdattormm</name>
       <connectortype>1</connectortype>
@@ -64,7 +64,7 @@
     <Connector>
       <connectorid>c51e7b38-9f2a-4e6d-b4c1-2d7a8e9f0b56</connectorid>
       <description>Autotask REST API: update configuration item warranty date.</description>
-      <displayname>Autotask (Warranty Sync)</displayname>
+      <displayname>AutotaskWarrantySync</displayname>
       <iconbrandcolor>#e5622b</iconbrandcolor>
       <name>new_5Fwsautotask</name>
       <connectortype>1</connectortype>
@@ -76,7 +76,7 @@
   </Connectors>
   <connectionreferences>
     <connectionreference connectionreferencelogicalname="new_shared5fwsitglue5f7e14506b88214820_wsync">
-      <connectionreferencedisplayname>IT Glue (Warranty Sync)</connectionreferencedisplayname>
+      <connectionreferencedisplayname>ITGlueWarrantySync</connectionreferencedisplayname>
       <connectorid>/providers/Microsoft.PowerApps/apis/shared_new-5fwsitglue-5f7e14506b88214820</connectorid>
       <customconnectorid>
         <connectorid>3e9c6a10-52b4-4d1f-8a7e-0c2b9f4d6e81</connectorid>
@@ -87,7 +87,7 @@
       <statuscode>1</statuscode>
     </connectionreference>
     <connectionreference connectionreferencelogicalname="new_shared5fwsdattormm5f7e14506b88214820_wsync">
-      <connectionreferencedisplayname>Datto RMM (Warranty Sync)</connectionreferencedisplayname>
+      <connectionreferencedisplayname>DattoRMMWarrantySync</connectionreferencedisplayname>
       <connectorid>/providers/Microsoft.PowerApps/apis/shared_new-5fwsdattormm-5f7e14506b88214820</connectorid>
       <customconnectorid>
         <connectorid>8a4f2d6b-1c3e-4b7a-9d05-6e8f1a2b3c47</connectorid>
@@ -98,7 +98,7 @@
       <statuscode>1</statuscode>
     </connectionreference>
     <connectionreference connectionreferencelogicalname="new_shared5fwsautotask5f7e14506b88214820_wsync">
-      <connectionreferencedisplayname>Autotask (Warranty Sync)</connectionreferencedisplayname>
+      <connectionreferencedisplayname>AutotaskWarrantySync</connectionreferencedisplayname>
       <connectorid>/providers/Microsoft.PowerApps/apis/shared_new-5fwsautotask-5f7e14506b88214820</connectorid>
       <customconnectorid>
         <connectorid>c51e7b38-9f2a-4e6d-b4c1-2d7a8e9f0b56</connectorid>

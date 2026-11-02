@@ -1,7 +1,7 @@
 # Warranty Sync – Nightly: flow build sheet
 
 1. **Recurrence** daily, finishing ≥2h before the first Datto RMM report.
-2. **Get Datto token**: Datto RMM (Warranty Sync) connector `GetToken`, secure inputs/outputs.
+2. **Get Datto token**: DattoRMMWarrantySync connector `GetToken`, secure inputs/outputs.
 3. **IT Glue list**: Apply to each over [LaptopTypeId, DesktopTypeId] (concurrency 1); Do until page returns <1000.
    `GET /configurations?filter[configuration_type_id]=<id>&filter[configuration_status_id]=<ActiveStatusId>&filter[archived]=false&page[size]=1000&page[number]=<n>`; merge with `union()`.
 4. **Select "Clean"**
