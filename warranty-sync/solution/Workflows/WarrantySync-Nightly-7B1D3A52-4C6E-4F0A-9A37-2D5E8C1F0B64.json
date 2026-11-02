@@ -420,7 +420,6 @@
             "parameters": {
               "dataset": "@parameters('SharePoint site URL (new_SharePointSiteUrl)')",
               "table": "@parameters('SharePoint list name (new_SharePointListName)')",
-              "$select": "Title,PushedDate",
               "$top": 5000
             },
             "authentication": "@parameters('$authentication')"

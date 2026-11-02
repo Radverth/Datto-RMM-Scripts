@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the importable Power Automate solution (WarrantySync_1_0_0_12.zip).
+"""Generate the importable Power Automate solution (WarrantySync_1_0_0_13.zip).
 
 Run:  python3 warranty-sync/build/build_solution.py
 Writes the unpacked source to warranty-sync/solution/ and the zip to warranty-sync/.
@@ -10,7 +10,7 @@ from xml.sax.saxutils import escape, quoteattr
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.dirname(HERE)
 SRC = os.path.join(OUT, "solution")
-ZIP = os.path.join(OUT, "WarrantySync_1_0_0_12.zip")
+ZIP = os.path.join(OUT, "WarrantySync_1_0_0_13.zip")
 
 PREFIX = "new"  # matches the environment default publisher (see PUBLISHER below)
 WF_ID = "7b1d3a52-4c6e-4f0a-9a37-2d5e8c1f0b64"
@@ -306,7 +306,7 @@ actions = {
     "Foreach_Type": {"type": "Foreach", "foreach": "@outputs('Compose_TypeIds')", "actions": foreach_type_actions,
                      "runtimeConfiguration": {"concurrency": {"repetitions": 1}}},
     "Select_Decided": {"type": "Select", "inputs": {"from": "@variables('Devices')", "select": decided}},
-    "Get_State_items": sp("GetItems", {"dataset": "@" + site, "table": "@" + lst, "$select": "Title,PushedDate", "$top": 5000}),
+    "Get_State_items": sp("GetItems", {"dataset": "@" + site, "table": "@" + lst, "$top": 5000}),
     "Select_State": {"type": "Select", "inputs": {"from": "@body('Get_State_items')?['value']",
                      "select": "@concat(item()?['Title'], '|', take(coalesce(item()?['PushedDate'], ''), 10))"}},
     "StateString": {"type": "Compose", "inputs": state_str},
@@ -587,7 +587,7 @@ FLOWS = [
 # environment (AutotaskaBillitySync_1_0_0_13.zip), which is known to import.
 ORGVER = 'OrganizationVersion="9.2.26102.127" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26102.00127"'
 PUBLISHER = ("DefaultPublisherorgda80817a", "Default Publisher for orgda80817a", "Default publisher for this organization")
-VERSION = "1.0.0.12"
+VERSION = "1.0.0.13"
 
 def write(path, text, bom=False):
     full = os.path.join(SRC, path); os.makedirs(os.path.dirname(full), exist_ok=True)
