@@ -274,14 +274,23 @@
                     ]
                   }
                 },
+                "Compose_Merged": {
+                  "type": "Compose",
+                  "inputs": "@union(variables('Devices'), body('Select_Clean'))",
+                  "runAfter": {
+                    "Set_PageCount": [
+                      "Succeeded"
+                    ]
+                  }
+                },
                 "Merge_Devices": {
                   "type": "SetVariable",
                   "inputs": {
                     "name": "Devices",
-                    "value": "@union(variables('Devices'), body('Select_Clean'))"
+                    "value": "@outputs('Compose_Merged')"
                   },
                   "runAfter": {
-                    "Set_PageCount": [
+                    "Compose_Merged": [
                       "Succeeded"
                     ]
                   }

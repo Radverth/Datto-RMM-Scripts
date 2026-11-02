@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the importable Power Automate solution (WarrantySync_1_0_0_6.zip).
+"""Generate the importable Power Automate solution (WarrantySync_1_0_0_7.zip).
 
 Run:  python3 warranty-sync/build/build_solution.py
 Writes the unpacked source to warranty-sync/solution/ and the zip to warranty-sync/.
@@ -10,7 +10,7 @@ from xml.sax.saxutils import escape, quoteattr
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.dirname(HERE)
 SRC = os.path.join(OUT, "solution")
-ZIP = os.path.join(OUT, "WarrantySync_1_0_0_6.zip")
+ZIP = os.path.join(OUT, "WarrantySync_1_0_0_7.zip")
 
 PREFIX = "new"  # matches the environment default publisher (see PUBLISHER below)
 WF_ID = "7b1d3a52-4c6e-4f0a-9a37-2d5e8c1f0b64"
@@ -203,10 +203,12 @@ until_actions = chain({
             "mitp": "@take(string(coalesce(item()?['attributes']?[%s], '')), 10)" % P("MyITPAttribute"),
         }}},
     "Set_PageCount": {"type": "SetVariable", "inputs": {"name": "PageCount", "value": "@length(body('Get_IT_Glue_page')?['data'])"}},
-    "Merge_Devices": {"type": "SetVariable", "inputs": {"name": "Devices", "value": "@union(variables('Devices'), body('Select_Clean'))"}},
+    # a Set variable step can't read the variable it sets, so merge in a Compose first
+    "Compose_Merged": {"type": "Compose", "inputs": "@union(variables('Devices'), body('Select_Clean'))"},
+    "Merge_Devices": {"type": "SetVariable", "inputs": {"name": "Devices", "value": "@outputs('Compose_Merged')"}},
     "Next_page": {"type": "IncrementVariable", "inputs": {"name": "Page", "value": 1}},
-}, ["Get_IT_Glue_page", "Select_Clean", "Set_PageCount", "Merge_Devices", "Next_page"])
-for k in ("Select_Clean", "Set_PageCount", "Merge_Devices", "Next_page"):
+}, ["Get_IT_Glue_page", "Select_Clean", "Set_PageCount", "Compose_Merged", "Merge_Devices", "Next_page"])
+for k in ("Select_Clean", "Set_PageCount", "Compose_Merged", "Merge_Devices", "Next_page"):
     until_actions[k]["runAfter"] = {list(until_actions)[list(until_actions).index(k)-1]: ["Succeeded"]}
 
 foreach_type_actions = {
@@ -478,7 +480,7 @@ FLOWS = [
 # environment (AutotaskaBillitySync_1_0_0_13.zip), which is known to import.
 ORGVER = 'OrganizationVersion="9.2.26102.127" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26102.00127"'
 PUBLISHER = ("DefaultPublisherorgda80817a", "Default Publisher for orgda80817a", "Default publisher for this organization")
-VERSION = "1.0.0.6"
+VERSION = "1.0.0.7"
 
 def write(path, text, bom=False):
     full = os.path.join(SRC, path); os.makedirs(os.path.dirname(full), exist_ok=True)
