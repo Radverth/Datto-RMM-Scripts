@@ -164,6 +164,17 @@ if (pm.response.code === 200) {
 if (pm.response.code === 200) console.log("Numeric ID resolves to uid:", pm.response.json().uid);
 pm.test("Status " + pm.response.code, () => true);
 '''),
+  req("2.6 Request rate (API limit headroom)", "GET", "{{datto_api_url}}/api/v2/system/request_rate",
+      "Shows how much of Datto RMM's API request limit your account is using. Check it before the first big backfill: "
+      "the Datto RMM Only flow makes up to two calls per device (read, then write if different). If usage is already "
+      "high, lower **Max writes per run**.",
+      r'''
+pm.test("200 OK", () => pm.response.to.have.status(200));
+const r = pm.response.json();
+console.log(r);
+const rows = Object.entries(r).map(([k, v]) => ({ field: k, value: typeof v === "object" ? JSON.stringify(v) : String(v) }));
+pm.visualizer.set(`<table border=1 cellpadding=4><tr><th>Field</th><th>Value</th></tr>{{#each rows}}<tr><td>{{field}}</td><td>{{value}}</td></tr>{{/each}}</table>`, { rows });
+'''),
 ]}
 
 autotask = {"name": "3. Autotask", "description":

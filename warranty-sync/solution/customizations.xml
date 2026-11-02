@@ -18,7 +18,7 @@
       <StatusCode>1</StatusCode>
       <RunAs>1</RunAs>
       <IsTransacted>1</IsTransacted>
-      <IntroducedVersion>1.0.0.7</IntroducedVersion>
+      <IntroducedVersion>1.0.0.8</IntroducedVersion>
       <IsCustomizable>1</IsCustomizable>
       <IsCustomProcessingStepAllowedForOtherPublishers>1</IsCustomProcessingStepAllowedForOtherPublishers>
       <ModernFlowType>0</ModernFlowType>
@@ -43,13 +43,38 @@
       <StatusCode>1</StatusCode>
       <RunAs>1</RunAs>
       <IsTransacted>1</IsTransacted>
-      <IntroducedVersion>1.0.0.7</IntroducedVersion>
+      <IntroducedVersion>1.0.0.8</IntroducedVersion>
       <IsCustomizable>1</IsCustomizable>
       <IsCustomProcessingStepAllowedForOtherPublishers>1</IsCustomProcessingStepAllowedForOtherPublishers>
       <ModernFlowType>0</ModernFlowType>
       <PrimaryEntity>none</PrimaryEntity>
       <LocalizedNames>
         <LocalizedName languagecode="1033" description="Warranty Sync - Autotask Only" />
+      </LocalizedNames>
+    </Workflow>
+    <Workflow WorkflowId="{9e3a5c71-0b4d-4f28-a6e1-7d2c8b5f4a19}" Name="Warranty Sync - Datto RMM Only">
+      <JsonFileName>/Workflows/WarrantySync-DattoRMMOnly-9E3A5C71-0B4D-4F28-A6E1-7D2C8B5F4A19.json</JsonFileName>
+      <Type>1</Type>
+      <Subprocess>0</Subprocess>
+      <Category>5</Category>
+      <Mode>0</Mode>
+      <Scope>4</Scope>
+      <OnDemand>0</OnDemand>
+      <TriggerOnCreate>0</TriggerOnCreate>
+      <TriggerOnDelete>0</TriggerOnDelete>
+      <AsyncAutodelete>0</AsyncAutodelete>
+      <SyncWorkflowLogOnFailure>0</SyncWorkflowLogOnFailure>
+      <StateCode>0</StateCode>
+      <StatusCode>1</StatusCode>
+      <RunAs>1</RunAs>
+      <IsTransacted>1</IsTransacted>
+      <IntroducedVersion>1.0.0.8</IntroducedVersion>
+      <IsCustomizable>1</IsCustomizable>
+      <IsCustomProcessingStepAllowedForOtherPublishers>1</IsCustomProcessingStepAllowedForOtherPublishers>
+      <ModernFlowType>0</ModernFlowType>
+      <PrimaryEntity>none</PrimaryEntity>
+      <LocalizedNames>
+        <LocalizedName languagecode="1033" description="Warranty Sync - Datto RMM Only" />
       </LocalizedNames>
     </Workflow>
   </Workflows>

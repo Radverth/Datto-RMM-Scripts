@@ -54,6 +54,7 @@ After each request, check:
 | 2.3 | Datto account | `GET {datto_api_url}/api/v2/account` | Whether the URL is right, and the platform name for the connector |
 | 2.4 | Device by UID | `GET {datto_api_url}/api/v2/device/{rmm_id}` | Whether `rmm-id` is the Datto device UID |
 | 2.5 | Device by numeric ID | `GET {datto_api_url}/api/v2/device/id/{rmm_id}` | Run only if 2.4 returns 404 |
+| 2.6 | Request rate | `GET {datto_api_url}/api/v2/system/request_rate` | How much of Datto's API request limit your account is using |
 | 3.1 | Autotask zone | `GET https://webservices.autotask.net/atservicesrest/v1.0/zoneInformation?user={autotask_username}` | Your zone; sets `autotask_base` |
 | 3.2 | Configuration item | `GET {autotask_base}/ConfigurationItems/{psa_id}` | Whether `psa-id` is the Autotask configuration item ID; shows the current `warrantyExpirationDate` |
 | 4.1 | ⚠ IT Glue write | `PATCH {itglue_host}/configurations/{configuration_id}` | Plan step 1: whether the date survives the next Autotask → IT Glue sync |
@@ -86,6 +87,7 @@ Then enter these when the solution asks for connections:
 | 1.3 rmm-id format | Most devices show a GUID | rmm-id is numeric: the flow needs an extra lookup step (confirm with 2.5) |
 | 2.2 connector token | 200 with an `access_token` | Datto doesn't accept query parameters, so the connector's token step must change |
 | 2.4 device by UID | 200 | See 2.5 |
+| 2.6 request rate | Usage well below the limit | A full Datto RMM Only run makes up to two calls per device; lower **Max writes per run** and spread the backfill over several runs |
 | 3.1 zone | Contains `webservices4` | The Autotask connector's host needs changing to your zone |
 | 3.2 configuration item | 200 | psa-id isn't an Autotask configuration item ID |
 | 4.1 then 1.4 after the next PSA sync | The date is unchanged | Autotask is overwriting the field (the field-lock risk in the plan) |
