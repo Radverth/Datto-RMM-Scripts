@@ -1,12 +1,12 @@
 <environmentvariabledefinition schemaname="new_SharePointListName">
-  <defaultvalue>Warranty Sync State</defaultvalue>
-  <description default="List title (or GUID)">
-    <label description="List title (or GUID)" languagecode="1033" />
+  <defaultvalue>0b1cb3ad-1ff9-4454-ba75-df5f5fdc9522</defaultvalue>
+  <description default="List ID (GUID from the list settings URL) or exact list title">
+    <label description="List ID (GUID from the list settings URL) or exact list title" languagecode="1033" />
   </description>
   <displayname default="SharePoint list name">
     <label description="SharePoint list name" languagecode="1033" />
   </displayname>
-  <introducedversion>1.0.0.13</introducedversion>
+  <introducedversion>1.0.0.14</introducedversion>
   <iscustomizable>1</iscustomizable>
   <isrequired>0</isrequired>
   <secretstore>0</secretstore>

@@ -112,14 +112,14 @@
           }
         },
         "SharePoint site URL (new_SharePointSiteUrl)": {
-          "defaultValue": "",
+          "defaultValue": "https://affinitylab.sharepoint.com/sites/warrantysynctest",
           "type": "String",
           "metadata": {
             "schemaName": "new_SharePointSiteUrl"
           }
         },
         "SharePoint list name (new_SharePointListName)": {
-          "defaultValue": "Warranty Sync State",
+          "defaultValue": "0b1cb3ad-1ff9-4454-ba75-df5f5fdc9522",
           "type": "String",
           "metadata": {
             "schemaName": "new_SharePointListName"

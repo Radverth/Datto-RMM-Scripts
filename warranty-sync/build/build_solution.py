@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the importable Power Automate solution (WarrantySync_1_0_0_13.zip).
+"""Generate the importable Power Automate solution (WarrantySync_1_0_0_14.zip).
 
 Run:  python3 warranty-sync/build/build_solution.py
 Writes the unpacked source to warranty-sync/solution/ and the zip to warranty-sync/.
@@ -10,7 +10,7 @@ from xml.sax.saxutils import escape, quoteattr
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.dirname(HERE)
 SRC = os.path.join(OUT, "solution")
-ZIP = os.path.join(OUT, "WarrantySync_1_0_0_13.zip")
+ZIP = os.path.join(OUT, "WarrantySync_1_0_0_14.zip")
 
 PREFIX = "new"  # matches the environment default publisher (see PUBLISHER below)
 WF_ID = "7b1d3a52-4c6e-4f0a-9a37-2d5e8c1f0b64"
@@ -25,8 +25,12 @@ ENV = {
  "MyITPAttribute": ("myITProcess attribute name", None, True, "Exact IT Glue configuration attribute holding the myITProcess warranty date"),
  "MaxWritesPerRun": ("Max writes per run", "1500", False, "Cap on devices written per night"),
  "WriteAutotask": ("Write Autotask", "yes", False, "Yes = the nightly flow also writes Autotask."),
- "SharePointSiteUrl": ("SharePoint site URL", None, True, "Site holding the Warranty Sync State list"),
- "SharePointListName": ("SharePoint list name", "Warranty Sync State", False, "List title (or GUID)"),
+ # defaults point at the test list (affinitylab / warrantysynctest, list ID from its settings URL); the flow
+ # designer validates SharePoint columns against these when the flow is saved
+ "SharePointSiteUrl": ("SharePoint site URL", "https://affinitylab.sharepoint.com/sites/warrantysynctest", True,
+                       "Site holding the Warranty Sync State list, e.g. https://<tenant>.sharepoint.com/sites/<site>"),
+ "SharePointListName": ("SharePoint list name", "0b1cb3ad-1ff9-4454-ba75-df5f5fdc9522", False,
+                        "List ID (GUID from the list settings URL) or exact list title"),
  "NotifyEmail": ("Summary email recipient", None, True, "Where the nightly summary is sent"),
 }
 BOOL_ENV = {"DryRun", "WriteAutotask"}   # Yes/No (Boolean) environment variables
@@ -587,7 +591,7 @@ FLOWS = [
 # environment (AutotaskaBillitySync_1_0_0_13.zip), which is known to import.
 ORGVER = 'OrganizationVersion="9.2.26102.127" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26102.00127"'
 PUBLISHER = ("DefaultPublisherorgda80817a", "Default Publisher for orgda80817a", "Default publisher for this organization")
-VERSION = "1.0.0.13"
+VERSION = "1.0.0.14"
 
 def write(path, text, bom=False):
     full = os.path.join(SRC, path); os.makedirs(os.path.dirname(full), exist_ok=True)

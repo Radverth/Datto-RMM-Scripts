@@ -1,11 +1,12 @@
 <environmentvariabledefinition schemaname="new_SharePointSiteUrl">
-  <description default="Site holding the Warranty Sync State list">
-    <label description="Site holding the Warranty Sync State list" languagecode="1033" />
+  <defaultvalue>https://affinitylab.sharepoint.com/sites/warrantysynctest</defaultvalue>
+  <description default="Site holding the Warranty Sync State list, e.g. https://&lt;tenant&gt;.sharepoint.com/sites/&lt;site&gt;">
+    <label description="Site holding the Warranty Sync State list, e.g. https://&lt;tenant&gt;.sharepoint.com/sites/&lt;site&gt;" languagecode="1033" />
   </description>
   <displayname default="SharePoint site URL">
     <label description="SharePoint site URL" languagecode="1033" />
   </displayname>
-  <introducedversion>1.0.0.13</introducedversion>
+  <introducedversion>1.0.0.14</introducedversion>
   <iscustomizable>1</iscustomizable>
   <isrequired>1</isrequired>
   <secretstore>0</secretstore>
