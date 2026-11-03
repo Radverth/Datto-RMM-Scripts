@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the importable Power Automate solution (WarrantySync_1_0_0_15.zip).
+"""Generate the importable Power Automate solution (WarrantySync_1_0_0_16.zip).
 
 Run:  python3 warranty-sync/build/build_solution.py
 Writes the unpacked source to warranty-sync/solution/ and the zip to warranty-sync/.
@@ -10,7 +10,7 @@ from xml.sax.saxutils import escape, quoteattr
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.dirname(HERE)
 SRC = os.path.join(OUT, "solution")
-ZIP = os.path.join(OUT, "WarrantySync_1_0_0_15.zip")
+ZIP = os.path.join(OUT, "WarrantySync_1_0_0_16.zip")
 
 PREFIX = "new"  # matches the environment default publisher (see PUBLISHER below)
 WF_ID = "7b1d3a52-4c6e-4f0a-9a37-2d5e8c1f0b64"
@@ -77,11 +77,16 @@ def swagger(title, desc, host, base, paths, security=None):
         d["securityDefinitions"] = {"api_key": security}; d["security"] = [{"api_key": []}]
     return d
 
+# IT Glue region is fixed in the connector: EU instance (api.itglue.com = US, api.au.itglue.com = AU)
+ITGLUE_HOST = "api.eu.itglue.com"
+# Datto RMM platform is fixed in the connector: merlot
+DATTO_HOST = "merlot-api.centrastage.net"
+
 CONNECTORS = {
  "itglue": {
   "name": "new_5Fwsitglue", "id": "3e9c6a10-52b4-4d1f-8a7e-0c2b9f4d6e81", "display": "ITGlueWarrantySync",
   "desc": "IT Glue configurations: list and update warranty date.", "color": "#1f5fa6",
-  "swagger": swagger("ITGlueWarrantySync", "IT Glue configurations for the warranty sync", "api.itglue.com", "/", {
+  "swagger": swagger("ITGlueWarrantySync", "IT Glue configurations for the warranty sync", ITGLUE_HOST, "/", {
      "/configurations": {"get": {"responses": ANY, "summary": "List configurations", "operationId": "ListConfigurations",
         "description": "Active, non-archived configurations of one type. Inputs are sent as headers and copied into "
                        "IT Glue's filter[...] / page[...] query parameters by connector policies, because connector "
@@ -98,10 +103,8 @@ CONNECTORS = {
           {"name": "body", "in": "body", "required": True, "schema": {"type": "object",
              "description": "JSON:API body, e.g. data.type = configurations, data.attributes.warranty-expires-at = yyyy-MM-dd"}}]}}},
      security={"type": "apiKey", "in": "header", "name": "x-api-key"}),
-  "params": dict(**conn_param("api_key", "IT Glue API key", "IT Glue API key with read/write on Configurations", True, 2),
-                 **conn_param("host", "IT Glue API host", "api.itglue.com (US), api.eu.itglue.com (EU) or api.au.itglue.com (AU)", False, 3)),
-  "policies": [hosturl("https://@connectionParameters('host')", ["ListConfigurations", "GetConfiguration", "UpdateConfiguration"]),
-               setheader("Set accept", "Accept", "application/vnd.api+json", ["ListConfigurations", "GetConfiguration", "UpdateConfiguration"]),
+  "params": dict(**conn_param("api_key", "IT Glue API key", "IT Glue API key with read/write on Configurations", True, 2)),
+  "policies": [setheader("Set accept", "Accept", "application/vnd.api+json", ["ListConfigurations", "GetConfiguration", "UpdateConfiguration"]),
                setheader("Set content type", "Content-Type", "application/vnd.api+json", ["UpdateConfiguration"]),
                setquery("Set type filter", "filter[configuration_type_id]", "@headers('typeId')", ["ListConfigurations"]),
                setquery("Set status filter", "filter[configuration_status_id]", "@headers('statusId')", ["ListConfigurations"]),
@@ -112,7 +115,7 @@ CONNECTORS = {
  "datto": {
   "name": "new_5Fwsdattormm", "id": "8a4f2d6b-1c3e-4b7a-9d05-6e8f1a2b3c47", "display": "DattoRMMWarrantySync",
   "desc": "Datto RMM API v2: get token and set device warranty date.", "color": "#0a6ebd",
-  "swagger": swagger("DattoRMMWarrantySync", "Datto RMM API v2 for the warranty sync", "pinotage-api.centrastage.net", "/", {
+  "swagger": swagger("DattoRMMWarrantySync", "Datto RMM API v2 for the warranty sync", DATTO_HOST, "/", {
      "/auth/oauth/token": {"post": {"summary": "Get token", "operationId": "GetToken",
         "description": "Uses the API key and secret stored in the connection.", "parameters": [],
         "responses": ANY}},
@@ -124,11 +127,9 @@ CONNECTORS = {
           {"name": "Authorization", "in": "header", "required": True, "type": "string", "description": "Bearer <access_token>"},
           {"name": "body", "in": "body", "required": True, "schema": {"type": "object", "properties": {
              "warrantyDate": {"type": "string", "description": "yyyy-MM-dd"}}}}]}}}),
-  "params": dict(**conn_param("platform", "Datto RMM platform", "Your platform name, e.g. pinotage, merlot, concord, vidal, zinfandel, syrah", False, 2),
-                 **conn_param("apiKey", "Datto RMM API key", "API key from Setup > Users > API", True, 3),
-                 **conn_param("apiSecret", "Datto RMM API secret", "API secret key", True, 4)),
-  "policies": [hosturl("https://@connectionParameters('platform')-api.centrastage.net", ["GetToken", "GetDevice", "SetDeviceWarranty"]),
-               setheader("Set token client", "Authorization", "Basic cHVibGljLWNsaWVudDpwdWJsaWM=", ["GetToken"]),
+  "params": dict(**conn_param("apiKey", "Datto RMM API key", "API key from Setup > Users > API", True, 2),
+                 **conn_param("apiSecret", "Datto RMM API secret", "API secret key", True, 3)),
+  "policies": [setheader("Set token client", "Authorization", "Basic cHVibGljLWNsaWVudDpwdWJsaWM=", ["GetToken"]),
                setheader("Set token content type", "Content-Type", "application/x-www-form-urlencoded", ["GetToken"]),
                setquery("Set grant type", "grant_type", "password", ["GetToken"]),
                setquery("Set API key", "username", "@connectionParameters('apiKey')", ["GetToken"]),
@@ -633,7 +634,7 @@ FLOWS = [
 # environment (AutotaskaBillitySync_1_0_0_13.zip), which is known to import.
 ORGVER = 'OrganizationVersion="9.2.26102.127" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26102.00127"'
 PUBLISHER = ("DefaultPublisherorgda80817a", "Default Publisher for orgda80817a", "Default publisher for this organization")
-VERSION = "1.0.0.15"
+VERSION = "1.0.0.16"
 
 def write(path, text, bom=False):
     full = os.path.join(SRC, path); os.makedirs(os.path.dirname(full), exist_ok=True)

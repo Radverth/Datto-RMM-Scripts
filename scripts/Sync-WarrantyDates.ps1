@@ -26,7 +26,7 @@ Actually write to IT Glue / Datto RMM / Autotask. Without it, only the state fil
 IT Glue API key. Falls back to env ITGLUE_API_KEY.
 
 .PARAMETER ITGlueBaseUri
-Default https://api.itglue.com
+Default https://api.eu.itglue.com (EU). US: https://api.itglue.com
 
 .PARAMETER LaptopTypeId
 .PARAMETER DesktopTypeId
@@ -71,7 +71,7 @@ Define the functions and exit (used by tests).
 param(
   [switch] $Apply,
   [string] $ITGlueApiKey,
-  [string] $ITGlueBaseUri = "https://api.itglue.com",
+  [string] $ITGlueBaseUri = "https://api.eu.itglue.com",
   [long] $LaptopTypeId,
   [long] $DesktopTypeId,
   [long] $ActiveStatusId,

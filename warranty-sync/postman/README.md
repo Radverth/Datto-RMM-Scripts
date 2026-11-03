@@ -76,8 +76,8 @@ Then enter these when the solution asks for connections:
 
 | Connection | Field | Value |
 |---|---|---|
-| ITGlueWarrantySync | API host | `itglue_host` without `https://`, e.g. `api.eu.itglue.com` |
-| DattoRMMWarrantySync | Platform | The name 2.3 reports, e.g. `merlot` |
+| ITGlueWarrantySync | API key | Same key as `itglue_api_key` (host is fixed to `api.eu.itglue.com`) |
+| DattoRMMWarrantySync | API key, API secret | Same as `datto_api_key` / `datto_api_secret` (host is fixed to `merlot-api.centrastage.net`) |
 | AutotaskWarrantySync | — | Same username, secret and integration code as in Postman |
 
 ## 4. What the checks mean

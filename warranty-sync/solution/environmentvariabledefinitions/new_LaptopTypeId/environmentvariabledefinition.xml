@@ -5,7 +5,7 @@
   <displayname default="IT Glue Laptop type ID">
     <label description="IT Glue Laptop type ID" languagecode="1033" />
   </displayname>
-  <introducedversion>1.0.0.15</introducedversion>
+  <introducedversion>1.0.0.16</introducedversion>
   <iscustomizable>1</iscustomizable>
   <isrequired>1</isrequired>
   <secretstore>0</secretstore>
