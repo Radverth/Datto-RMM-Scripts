@@ -1,0 +1,13 @@
+<environmentvariabledefinition schemaname="new_AutotaskUsername">
+  <description default="Username of the Autotask API user (an email address)">
+    <label description="Username of the Autotask API user (an email address)" languagecode="1033" />
+  </description>
+  <displayname default="Autotask API username">
+    <label description="Autotask API username" languagecode="1033" />
+  </displayname>
+  <introducedversion>1.0.0.19</introducedversion>
+  <iscustomizable>1</iscustomizable>
+  <isrequired>1</isrequired>
+  <secretstore>0</secretstore>
+  <type>100000000</type>
+</environmentvariabledefinition>

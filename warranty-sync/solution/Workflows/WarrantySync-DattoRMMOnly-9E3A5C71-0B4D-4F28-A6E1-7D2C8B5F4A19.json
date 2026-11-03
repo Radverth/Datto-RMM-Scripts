@@ -101,6 +101,20 @@
           "metadata": {
             "schemaName": "new_NotifyEmail"
           }
+        },
+        "Autotask API username (new_AutotaskUsername)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "new_AutotaskUsername"
+          }
+        },
+        "Autotask integration code (new_AutotaskIntegrationCode)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "new_AutotaskIntegrationCode"
+          }
         }
       },
       "triggers": {
@@ -552,7 +566,9 @@
                         "value": "@{if(empty(trim(string(coalesce(items('Foreach_Device')?['serial'], '')))), '-no-serial-', trim(string(coalesce(items('Foreach_Device')?['serial'], ''))))}"
                       }
                     ]
-                  }
+                  },
+                  "UserName": "@{parameters('Autotask API username (new_AutotaskUsername)')}",
+                  "ApiIntegrationcode": "@{parameters('Autotask integration code (new_AutotaskIntegrationCode)')}"
                 }
               },
               "runAfter": {}

@@ -1,0 +1,13 @@
+<environmentvariabledefinition schemaname="new_AutotaskIntegrationCode">
+  <description default="Tracking identifier of the Autotask API user">
+    <label description="Tracking identifier of the Autotask API user" languagecode="1033" />
+  </description>
+  <displayname default="Autotask integration code">
+    <label description="Autotask integration code" languagecode="1033" />
+  </displayname>
+  <introducedversion>1.0.0.19</introducedversion>
+  <iscustomizable>1</iscustomizable>
+  <isrequired>1</isrequired>
+  <secretstore>0</secretstore>
+  <type>100000000</type>
+</environmentvariabledefinition>

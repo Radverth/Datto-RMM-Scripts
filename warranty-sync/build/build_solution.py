@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the importable Power Automate solution (WarrantySync_1_0_0_18.zip).
+"""Generate the importable Power Automate solution (WarrantySync_1_0_0_19.zip).
 
 Run:  python3 warranty-sync/build/build_solution.py
 Writes the unpacked source to warranty-sync/solution/ and the zip to warranty-sync/.
@@ -10,7 +10,7 @@ from xml.sax.saxutils import escape, quoteattr
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.dirname(HERE)
 SRC = os.path.join(OUT, "solution")
-ZIP = os.path.join(OUT, "WarrantySync_1_0_0_18.zip")
+ZIP = os.path.join(OUT, "WarrantySync_1_0_0_19.zip")
 
 PREFIX = "new"  # matches the environment default publisher (see PUBLISHER below)
 WF_ID = "7b1d3a52-4c6e-4f0a-9a37-2d5e8c1f0b64"
@@ -32,6 +32,10 @@ ENV = {
  "SharePointListName": ("SharePoint list name", "0b1cb3ad-1ff9-4454-ba75-df5f5fdc9522", False,
                         "List ID (GUID from the list settings URL) or exact list title"),
  "NotifyEmail": ("Summary email recipient", None, True, "Where the nightly summary is sent"),
+ # Autotask sends these two as headers on every call. Connector policies can't read connection fields in this
+ # tenant, so they come from here; the API secret itself stays in the Autotask connection.
+ "AutotaskUsername": ("Autotask API username", None, True, "Username of the Autotask API user (an email address)"),
+ "AutotaskIntegrationCode": ("Autotask integration code", None, True, "Tracking identifier of the Autotask API user"),
 }
 BOOL_ENV = {"DryRun", "WriteAutotask"}   # Yes/No (Boolean) environment variables
 
@@ -81,6 +85,9 @@ def swagger(title, desc, host, base, paths, security=None):
 ITGLUE_HOST = "api.eu.itglue.com"
 # Datto RMM platform is fixed in the connector: merlot
 DATTO_HOST = "merlot-api.centrastage.net"
+
+AT_HDRS = [{"name": "UserName", "in": "header", "required": True, "type": "string", "description": "Autotask API username"},
+          {"name": "ApiIntegrationcode", "in": "header", "required": True, "type": "string", "description": "Autotask integration code"}]
 
 CONNECTORS = {
  "itglue": {
@@ -141,21 +148,17 @@ CONNECTORS = {
   "desc": "Autotask REST API: update configuration item warranty date.", "color": "#e5622b",
   "swagger": swagger("AutotaskWarrantySync", "Autotask REST API for the warranty sync", "webservices4.autotask.net", "/atservicesrest/V1.0", {
      "/ConfigurationItems/{id}": {"get": {"responses": ANY, "summary": "Get configuration item", "operationId": "GetConfigurationItem",
-        "parameters": [{"name": "id", "in": "path", "required": True, "type": "string", "description": "Autotask configuration item ID"}]}},
+        "parameters": [{"name": "id", "in": "path", "required": True, "type": "string", "description": "Autotask configuration item ID"}] + AT_HDRS}},
      "/ConfigurationItems/query": {"post": {"responses": ANY, "summary": "Query configuration items", "operationId": "QueryConfigurationItems",
         "description": "Autotask query model: MaxRecords, IncludeFields, Filter [{op, field, value}].",
         "parameters": [{"name": "body", "in": "body", "required": True, "schema": {"type": "object",
-             "description": "e.g. Filter = [{op: eq, field: serialNumber, value: <serial>}]"}}]}},
+             "description": "e.g. Filter = [{op: eq, field: serialNumber, value: <serial>}]"}}] + AT_HDRS}},
      "/ConfigurationItems": {"patch": {"responses": ANY, "summary": "Update configuration item", "operationId": "UpdateConfigurationItem",
         "parameters": [{"name": "body", "in": "body", "required": True, "schema": {"type": "object", "properties": {
-             "id": {"type": "integer", "format": "int64"}, "warrantyExpirationDate": {"type": "string", "description": "yyyy-MM-ddT00:00:00Z (midnight UTC)"}}}}]}}},
+             "id": {"type": "integer", "format": "int64"}, "warrantyExpirationDate": {"type": "string", "description": "yyyy-MM-ddT00:00:00Z (midnight UTC)"}}}}] + AT_HDRS}}},
      security={"type": "apiKey", "in": "header", "name": "Secret"}),
-  "params": dict(**conn_param("api_key", "Autotask API secret", "Secret of the Autotask API user", True, 2),
-                 **conn_param("username", "Autotask API username", "Username of the Autotask API user", False, 3),
-                 **conn_param("integrationCode", "Autotask integration code", "Tracking identifier of the API user", True, 4)),
-  "policies": [setheader("Set username", "UserName", "@connectionParameters('username')", ["GetConfigurationItem", "QueryConfigurationItems", "UpdateConfigurationItem"]),
-               setheader("Set integration code", "ApiIntegrationcode", "@connectionParameters('integrationCode')", ["GetConfigurationItem", "QueryConfigurationItems", "UpdateConfigurationItem"]),
-               setheader("Set content type", "Content-Type", "application/json", ["QueryConfigurationItems", "UpdateConfigurationItem"])],
+  "params": dict(**conn_param("api_key", "Autotask API secret", "Secret of the Autotask API user", True, 2)),
+  "policies": [setheader("Set content type", "Content-Type", "application/json", ["QueryConfigurationItems", "UpdateConfigurationItem"])],
  },
 }
 for c in CONNECTORS.values():
@@ -164,6 +167,9 @@ for c in CONNECTORS.values():
 
 def cc(key, op, params, secure=("outputs",), run_after=None):
     api = CONNECTORS[key]["api"]
+    if key == "autotask":
+        params = dict(params, UserName="@{%s}" % P("AutotaskUsername"),
+                      ApiIntegrationcode="@{%s}" % P("AutotaskIntegrationCode"))
     a = {"type": "OpenApiConnection", "inputs": {"host": {"apiId": "/providers/Microsoft.PowerApps/apis/" + api,
          "operationId": op, "connectionName": api}, "parameters": params}, "runAfter": run_after or {}}
     if secure: a["runtimeConfiguration"] = {"secureData": {"properties": list(secure)}}
@@ -556,7 +562,8 @@ def single_system_flow(label, id_compose, idlabel, conn, get_action, current_exp
 
     params = {"$connections": {"defaultValue": {}, "type": "Object"},
               "$authentication": {"defaultValue": {}, "type": "SecureObject"}}
-    for k in ["DryRun", "LaptopTypeId", "DesktopTypeId", "ActiveStatusId", "MyITPAttribute", "MaxWritesPerRun", "NotifyEmail"]:
+    for k in ["DryRun", "LaptopTypeId", "DesktopTypeId", "ActiveStatusId", "MyITPAttribute", "MaxWritesPerRun", "NotifyEmail",
+              "AutotaskUsername", "AutotaskIntegrationCode"]:
         params["%s (%s_%s)" % (ENV[k][0], PREFIX, k)] = env_param(k)
 
     return {"properties": {
@@ -693,7 +700,7 @@ FLOWS = [
 # environment (AutotaskaBillitySync_1_0_0_13.zip), which is known to import.
 ORGVER = 'OrganizationVersion="9.2.26102.127" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26102.00127"'
 PUBLISHER = ("DefaultPublisherorgda80817a", "Default Publisher for orgda80817a", "Default publisher for this organization")
-VERSION = "1.0.0.18"
+VERSION = "1.0.0.19"
 
 def write(path, text, bom=False):
     full = os.path.join(SRC, path); os.makedirs(os.path.dirname(full), exist_ok=True)
