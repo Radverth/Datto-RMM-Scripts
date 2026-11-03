@@ -204,6 +204,84 @@
             ]
           }
         },
+        "If_device_entered": {
+          "type": "If",
+          "expression": {
+            "equals": [
+              "@not(empty(outputs('Compose_Device')))",
+              true
+            ]
+          },
+          "actions": {
+            "Get_by_id": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_new-5fwsitglue-5f7e14506b88214820",
+                  "operationId": "GetConfiguration",
+                  "connectionName": "shared_new-5fwsitglue-5f7e14506b88214820"
+                },
+                "parameters": {
+                  "id": "@{trim(string(triggerBody()?['Device']))}"
+                }
+              },
+              "runAfter": {}
+            },
+            "Keep_if_laptop_desktop": {
+              "type": "Query",
+              "runAfter": {
+                "Get_by_id": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "from": "@createArray(body('Get_by_id')?['data'])",
+                "where": "@and(contains(createArray(string(parameters('IT Glue Laptop type ID (new_LaptopTypeId)')), string(parameters('IT Glue Desktop type ID (new_DesktopTypeId)'))), string(item()?['attributes']?['configuration-type-id'])), equals(string(item()?['attributes']?['configuration-status-id']), string(parameters('IT Glue Active status ID (new_ActiveStatusId)'))), not(equals(item()?['attributes']?['archived'], true)))"
+              }
+            },
+            "Select_Found": {
+              "type": "Select",
+              "runAfter": {
+                "Keep_if_laptop_desktop": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "from": "@body('Keep_if_laptop_desktop')",
+                "select": {
+                  "id": "@item()?['id']",
+                  "org": "@item()?['attributes']?['organization-name']",
+                  "name": "@item()?['attributes']?['name']",
+                  "serial": "@item()?['attributes']?['serial-number']",
+                  "rmm": "@string(coalesce(item()?['attributes']?['rmm-id'], ''))",
+                  "psa": "@string(coalesce(item()?['attributes']?['psa-id'], ''))",
+                  "glue": "@take(string(coalesce(item()?['attributes']?['warranty-expires-at'], '')), 10)",
+                  "mitp": "@take(string(coalesce(item()?['attributes']?[parameters('myITProcess attribute name (new_MyITPAttribute)')], '')), 10)"
+                }
+              }
+            },
+            "Set_Found": {
+              "type": "SetVariable",
+              "runAfter": {
+                "Select_Found": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "name": "Devices",
+                "value": "@body('Select_Found')"
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          },
+          "runAfter": {
+            "Compose_TypeIds": [
+              "Succeeded"
+            ]
+          }
+        },
         "Foreach_Type": {
           "type": "Foreach",
           "foreach": "@outputs('Compose_TypeIds')",
@@ -216,97 +294,124 @@
               },
               "runAfter": {}
             },
-            "Page_until_short": {
-              "type": "Until",
-              "expression": "@less(variables('PageCount'), 1000)",
-              "limit": {
-                "count": 100,
-                "timeout": "PT3H"
+            "If_still_searching": {
+              "type": "If",
+              "expression": {
+                "equals": [
+                  "@not(and(not(empty(outputs('Compose_Device'))), greater(length(variables('Devices')), 0)))",
+                  true
+                ]
               },
               "actions": {
-                "Get_IT_Glue_page": {
-                  "type": "OpenApiConnection",
-                  "inputs": {
-                    "host": {
-                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_new-5fwsitglue-5f7e14506b88214820",
-                      "operationId": "ListConfigurations",
-                      "connectionName": "shared_new-5fwsitglue-5f7e14506b88214820"
+                "Page_until_short": {
+                  "type": "Until",
+                  "limit": {
+                    "count": 100,
+                    "timeout": "PT3H"
+                  },
+                  "actions": {
+                    "Get_IT_Glue_page": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_new-5fwsitglue-5f7e14506b88214820",
+                          "operationId": "ListConfigurations",
+                          "connectionName": "shared_new-5fwsitglue-5f7e14506b88214820"
+                        },
+                        "parameters": {
+                          "typeId": "@{items('Foreach_Type')}",
+                          "statusId": "@{parameters('IT Glue Active status ID (new_ActiveStatusId)')}",
+                          "pageSize": "1000",
+                          "pageNumber": "@{variables('Page')}"
+                        }
+                      },
+                      "runAfter": {}
                     },
-                    "parameters": {
-                      "typeId": "@{items('Foreach_Type')}",
-                      "statusId": "@{parameters('IT Glue Active status ID (new_ActiveStatusId)')}",
-                      "pageSize": "1000",
-                      "pageNumber": "@{variables('Page')}"
+                    "Select_Clean": {
+                      "type": "Select",
+                      "inputs": {
+                        "from": "@body('Get_IT_Glue_page')?['data']",
+                        "select": {
+                          "id": "@item()?['id']",
+                          "org": "@item()?['attributes']?['organization-name']",
+                          "name": "@item()?['attributes']?['name']",
+                          "serial": "@item()?['attributes']?['serial-number']",
+                          "rmm": "@string(coalesce(item()?['attributes']?['rmm-id'], ''))",
+                          "psa": "@string(coalesce(item()?['attributes']?['psa-id'], ''))",
+                          "glue": "@take(string(coalesce(item()?['attributes']?['warranty-expires-at'], '')), 10)",
+                          "mitp": "@take(string(coalesce(item()?['attributes']?[parameters('myITProcess attribute name (new_MyITPAttribute)')], '')), 10)"
+                        }
+                      },
+                      "runAfter": {
+                        "Get_IT_Glue_page": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Set_PageCount": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "PageCount",
+                        "value": "@length(body('Get_IT_Glue_page')?['data'])"
+                      },
+                      "runAfter": {
+                        "Select_Clean": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Compose_Merged": {
+                      "type": "Compose",
+                      "inputs": "@union(variables('Devices'), body('Filter_Page'))",
+                      "runAfter": {
+                        "Filter_Page": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Merge_Devices": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "Devices",
+                        "value": "@outputs('Compose_Merged')"
+                      },
+                      "runAfter": {
+                        "Compose_Merged": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Next_page": {
+                      "type": "IncrementVariable",
+                      "inputs": {
+                        "name": "Page",
+                        "value": 1
+                      },
+                      "runAfter": {
+                        "Merge_Devices": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Filter_Page": {
+                      "type": "Query",
+                      "runAfter": {
+                        "Set_PageCount": [
+                          "Succeeded"
+                        ]
+                      },
+                      "inputs": {
+                        "from": "@body('Select_Clean')",
+                        "where": "@and(or(empty(outputs('Compose_Device')), equals(toLower(string(item()?['id'])), outputs('Compose_Device')), equals(toLower(string(item()?['psa'])), outputs('Compose_Device')), equals(toLower(trim(string(coalesce(item()?['serial'], '')))), outputs('Compose_Device')), equals(toLower(trim(string(coalesce(item()?['name'], '')))), outputs('Compose_Device'))), not(empty(item()?['psa'])))"
+                      }
                     }
                   },
+                  "expression": "@or(less(variables('PageCount'), 1000), and(not(empty(outputs('Compose_Device'))), greater(length(variables('Devices')), 0)))",
                   "runAfter": {}
-                },
-                "Select_Clean": {
-                  "type": "Select",
-                  "inputs": {
-                    "from": "@body('Get_IT_Glue_page')?['data']",
-                    "select": {
-                      "id": "@item()?['id']",
-                      "org": "@item()?['attributes']?['organization-name']",
-                      "name": "@item()?['attributes']?['name']",
-                      "serial": "@item()?['attributes']?['serial-number']",
-                      "rmm": "@string(coalesce(item()?['attributes']?['rmm-id'], ''))",
-                      "psa": "@string(coalesce(item()?['attributes']?['psa-id'], ''))",
-                      "glue": "@take(string(coalesce(item()?['attributes']?['warranty-expires-at'], '')), 10)",
-                      "mitp": "@take(string(coalesce(item()?['attributes']?[parameters('myITProcess attribute name (new_MyITPAttribute)')], '')), 10)"
-                    }
-                  },
-                  "runAfter": {
-                    "Get_IT_Glue_page": [
-                      "Succeeded"
-                    ]
-                  }
-                },
-                "Set_PageCount": {
-                  "type": "SetVariable",
-                  "inputs": {
-                    "name": "PageCount",
-                    "value": "@length(body('Get_IT_Glue_page')?['data'])"
-                  },
-                  "runAfter": {
-                    "Select_Clean": [
-                      "Succeeded"
-                    ]
-                  }
-                },
-                "Compose_Merged": {
-                  "type": "Compose",
-                  "inputs": "@union(variables('Devices'), body('Select_Clean'))",
-                  "runAfter": {
-                    "Set_PageCount": [
-                      "Succeeded"
-                    ]
-                  }
-                },
-                "Merge_Devices": {
-                  "type": "SetVariable",
-                  "inputs": {
-                    "name": "Devices",
-                    "value": "@outputs('Compose_Merged')"
-                  },
-                  "runAfter": {
-                    "Compose_Merged": [
-                      "Succeeded"
-                    ]
-                  }
-                },
-                "Next_page": {
-                  "type": "IncrementVariable",
-                  "inputs": {
-                    "name": "Page",
-                    "value": 1
-                  },
-                  "runAfter": {
-                    "Merge_Devices": [
-                      "Succeeded"
-                    ]
-                  }
                 }
+              },
+              "else": {
+                "actions": {}
               },
               "runAfter": {
                 "Reset_Page": [
@@ -321,8 +426,11 @@
             }
           },
           "runAfter": {
-            "Compose_TypeIds": [
-              "Succeeded"
+            "If_device_entered": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
             ]
           }
         },

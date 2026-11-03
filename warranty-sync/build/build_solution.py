@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the importable Power Automate solution (WarrantySync_1_0_0_14.zip).
+"""Generate the importable Power Automate solution (WarrantySync_1_0_0_15.zip).
 
 Run:  python3 warranty-sync/build/build_solution.py
 Writes the unpacked source to warranty-sync/solution/ and the zip to warranty-sync/.
@@ -10,7 +10,7 @@ from xml.sax.saxutils import escape, quoteattr
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.dirname(HERE)
 SRC = os.path.join(OUT, "solution")
-ZIP = os.path.join(OUT, "WarrantySync_1_0_0_14.zip")
+ZIP = os.path.join(OUT, "WarrantySync_1_0_0_15.zip")
 
 PREFIX = "new"  # matches the environment default publisher (see PUBLISHER below)
 WF_ID = "7b1d3a52-4c6e-4f0a-9a37-2d5e8c1f0b64"
@@ -91,15 +91,17 @@ CONNECTORS = {
           {"name": "statusId", "in": "header", "required": True, "type": "string", "x-ms-summary": "Configuration status ID"},
           {"name": "pageSize", "in": "header", "required": True, "type": "string", "default": "1000", "x-ms-summary": "Page size"},
           {"name": "pageNumber", "in": "header", "required": True, "type": "string", "default": "1", "x-ms-summary": "Page number"}]}},
-     "/configurations/{id}": {"patch": {"responses": ANY, "summary": "Update configuration", "operationId": "UpdateConfiguration",
+     "/configurations/{id}": {"get": {"responses": ANY, "summary": "Get configuration", "operationId": "GetConfiguration",
+        "parameters": [{"name": "id", "in": "path", "required": True, "type": "string", "description": "IT Glue configuration ID"}]},
+        "patch": {"responses": ANY, "summary": "Update configuration", "operationId": "UpdateConfiguration",
         "parameters": [{"name": "id", "in": "path", "required": True, "type": "string"},
           {"name": "body", "in": "body", "required": True, "schema": {"type": "object",
              "description": "JSON:API body, e.g. data.type = configurations, data.attributes.warranty-expires-at = yyyy-MM-dd"}}]}}},
      security={"type": "apiKey", "in": "header", "name": "x-api-key"}),
   "params": dict(**conn_param("api_key", "IT Glue API key", "IT Glue API key with read/write on Configurations", True, 2),
                  **conn_param("host", "IT Glue API host", "api.itglue.com (US), api.eu.itglue.com (EU) or api.au.itglue.com (AU)", False, 3)),
-  "policies": [hosturl("https://@connectionParameters('host')", ["ListConfigurations", "UpdateConfiguration"]),
-               setheader("Set accept", "Accept", "application/vnd.api+json", ["ListConfigurations", "UpdateConfiguration"]),
+  "policies": [hosturl("https://@connectionParameters('host')", ["ListConfigurations", "GetConfiguration", "UpdateConfiguration"]),
+               setheader("Set accept", "Accept", "application/vnd.api+json", ["ListConfigurations", "GetConfiguration", "UpdateConfiguration"]),
                setheader("Set content type", "Content-Type", "application/vnd.api+json", ["UpdateConfiguration"]),
                setquery("Set type filter", "filter[configuration_type_id]", "@headers('typeId')", ["ListConfigurations"]),
                setquery("Set status filter", "filter[configuration_status_id]", "@headers('statusId')", ["ListConfigurations"]),
@@ -224,6 +226,30 @@ foreach_type_actions = {
                          "limit": {"count": 100, "timeout": "PT3H"}, "actions": until_actions,
                          "runAfter": {"Reset_Page": ["Succeeded"]}},
 }
+
+CLEAN_SELECT = until_actions["Select_Clean"]["inputs"]["select"]
+
+def scan_actions(page_filter=None, stop=None):
+    """IT Glue paging loop for one configuration type.
+    page_filter: keep only matching devices from each page BEFORE merging (merging thousands of
+                 records with union() is slow, so a targeted run merges only the hits).
+    stop:        expression that is true once the wanted device is found; ends paging early and
+                 skips the remaining types."""
+    ua = json.loads(json.dumps(until_actions))
+    if page_filter:
+        ua["Filter_Page"] = {"type": "Query", "runAfter": {"Set_PageCount": ["Succeeded"]},
+                             "inputs": {"from": "@body('Select_Clean')", "where": "@" + page_filter}}
+        ua["Compose_Merged"]["inputs"] = "@union(variables('Devices'), body('Filter_Page'))"
+        ua["Compose_Merged"]["runAfter"] = {"Filter_Page": ["Succeeded"]}
+    until = {"type": "Until", "limit": {"count": 100, "timeout": "PT3H"}, "actions": ua,
+             "expression": "@or(less(variables('PageCount'), 1000), %s)" % stop if stop else "@less(variables('PageCount'), 1000)"}
+    acts = {"Reset_Page": {"type": "SetVariable", "inputs": {"name": "Page", "value": 1}, "runAfter": {}}}
+    if stop:
+        acts["If_still_searching"] = cond("not(%s)" % stop, {"Page_until_short": dict(until, runAfter={})},
+                                          run_after={"Reset_Page": ["Succeeded"]})
+    else:
+        acts["Page_until_short"] = dict(until, runAfter={"Reset_Page": ["Succeeded"]})
+    return acts
 
 decided = {"id": "@item()?['id']", "org": "@item()?['org']", "name": "@item()?['name']", "serial": "@item()?['serial']",
            "rmm": "@item()?['rmm']", "psa": "@item()?['psa']", "glue": "@item()?['glue']", "mitp": "@item()?['mitp']",
@@ -426,8 +452,22 @@ def single_system_flow(label, idfield, idlabel, conn, get_action, current_expr, 
         **json.loads(json.dumps(pre_actions)),
         "Compose_Device": {"type": "Compose", "inputs": "@toLower(trim(string(coalesce(triggerBody()?['Device'], ''))))"},
         "Compose_TypeIds": {"type": "Compose", "inputs": "@createArray(%s, %s)" % (P("LaptopTypeId"), P("DesktopTypeId"))},
+        # fast path: the Device input is an IT Glue configuration ID -> fetch that one record
+        "If_device_entered": cond("not(empty(%s))" % one_dev, {
+            "Get_by_id": cc("itglue", "GetConfiguration", {"id": "@{trim(string(triggerBody()?['Device']))}"}, secure=None),
+            "Keep_if_laptop_desktop": {"type": "Query", "runAfter": {"Get_by_id": ["Succeeded"]}, "inputs": {
+                "from": "@createArray(body('Get_by_id')?['data'])",
+                "where": ("@and(contains(createArray(string(%s), string(%s)), string(item()?['attributes']?['configuration-type-id'])), "
+                          "equals(string(item()?['attributes']?['configuration-status-id']), string(%s)), "
+                          "not(equals(item()?['attributes']?['archived'], true)))") % (P("LaptopTypeId"), P("DesktopTypeId"), P("ActiveStatusId"))}},
+            "Select_Found": {"type": "Select", "runAfter": {"Keep_if_laptop_desktop": ["Succeeded"]},
+                             "inputs": {"from": "@body('Keep_if_laptop_desktop')", "select": json.loads(json.dumps(CLEAN_SELECT))}},
+            "Set_Found": {"type": "SetVariable", "runAfter": {"Select_Found": ["Succeeded"]},
+                          "inputs": {"name": "Devices", "value": "@body('Select_Found')"}}}),
+        # otherwise (or if the ID lookup found nothing) scan IT Glue, keeping only matching devices per page
         "Foreach_Type": {"type": "Foreach", "foreach": "@outputs('Compose_TypeIds')",
-                         "actions": json.loads(json.dumps(foreach_type_actions)),
+                         "actions": scan_actions(page_filter="and(%s, not(empty(item()?['%s'])))" % (match, idfield),
+                                                 stop="and(not(empty(%s)), greater(length(variables('Devices')), 0))" % one_dev),
                          "runtimeConfiguration": {"concurrency": {"repetitions": 1}}},
         "Select_Decided": {"type": "Select", "inputs": {"from": "@variables('Devices')", "select": decided}},
         "Filter_Target": {"type": "Query", "inputs": {"from": "@body('Select_Decided')", "where": "@" + match}},
@@ -449,11 +489,13 @@ def single_system_flow(label, idfield, idlabel, conn, get_action, current_expr, 
             "authentication": "@parameters('$authentication')"}},
     }
     order = (["Init_Devices", "Init_Page", "Init_PageCount", "Init_Results"] + list(pre_actions) +
-             ["Compose_Device", "Compose_TypeIds", "Foreach_Type", "Select_Decided", "Filter_Target", "Filter_System",
-              "Compose_Batch", "Foreach_Device", "Filter_Changed", "Filter_Failed", "Results_table", "Send_summary"])
+             ["Compose_Device", "Compose_TypeIds", "If_device_entered", "Foreach_Type", "Select_Decided", "Filter_Target",
+              "Filter_System", "Compose_Batch", "Foreach_Device", "Filter_Changed", "Filter_Failed", "Results_table", "Send_summary"])
     prev = None
     for n in order:
-        actions[n]["runAfter"] = {prev: (ALL if n in order[order.index("Filter_Changed"):] else ["Succeeded"])} if prev else {}
+        # Foreach_Type runs even when the ID lookup fails (input wasn't an IT Glue ID)
+        lenient = n == "Foreach_Type" or n in order[order.index("Filter_Changed"):]
+        actions[n]["runAfter"] = {prev: (ALL if lenient else ["Succeeded"])} if prev else {}
         prev = n
 
     params = {"$connections": {"defaultValue": {}, "type": "Object"},
@@ -535,7 +577,7 @@ ls_actions = {
     "Compose_Search": {"type": "Compose", "inputs": "@toLower(trim(string(coalesce(triggerBody()?['Search'], ''))))"},
     "Compose_TypeIds": {"type": "Compose", "inputs": "@createArray(%s, %s)" % (P("LaptopTypeId"), P("DesktopTypeId"))},
     "Foreach_Type": {"type": "Foreach", "foreach": "@outputs('Compose_TypeIds')",
-                     "actions": json.loads(json.dumps(foreach_type_actions)),
+                     "actions": scan_actions(page_filter=list_filter),
                      "runtimeConfiguration": {"concurrency": {"repetitions": 1}}},
     "Select_Decided": {"type": "Select", "inputs": {"from": "@variables('Devices')", "select": decided}},
     "Filter_List": {"type": "Query", "inputs": {"from": "@body('Select_Decided')", "where": "@" + list_filter}},
@@ -591,7 +633,7 @@ FLOWS = [
 # environment (AutotaskaBillitySync_1_0_0_13.zip), which is known to import.
 ORGVER = 'OrganizationVersion="9.2.26102.127" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26102.00127"'
 PUBLISHER = ("DefaultPublisherorgda80817a", "Default Publisher for orgda80817a", "Default publisher for this organization")
-VERSION = "1.0.0.14"
+VERSION = "1.0.0.15"
 
 def write(path, text, bom=False):
     full = os.path.join(SRC, path); os.makedirs(os.path.dirname(full), exist_ok=True)

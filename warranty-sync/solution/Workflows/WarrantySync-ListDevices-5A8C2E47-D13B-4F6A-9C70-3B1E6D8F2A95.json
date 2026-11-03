@@ -177,7 +177,6 @@
             },
             "Page_until_short": {
               "type": "Until",
-              "expression": "@less(variables('PageCount'), 1000)",
               "limit": {
                 "count": 100,
                 "timeout": "PT3H"
@@ -235,9 +234,9 @@
                 },
                 "Compose_Merged": {
                   "type": "Compose",
-                  "inputs": "@union(variables('Devices'), body('Select_Clean'))",
+                  "inputs": "@union(variables('Devices'), body('Filter_Page'))",
                   "runAfter": {
-                    "Set_PageCount": [
+                    "Filter_Page": [
                       "Succeeded"
                     ]
                   }
@@ -265,8 +264,21 @@
                       "Succeeded"
                     ]
                   }
+                },
+                "Filter_Page": {
+                  "type": "Query",
+                  "runAfter": {
+                    "Set_PageCount": [
+                      "Succeeded"
+                    ]
+                  },
+                  "inputs": {
+                    "from": "@body('Select_Clean')",
+                    "where": "@and(or(empty(outputs('Compose_Search')), contains(toLower(concat(coalesce(item()?['org'], ''), '|', coalesce(item()?['name'], ''), '|', coalesce(item()?['serial'], ''), '|', item()?['id'], '|', item()?['rmm'], '|', item()?['psa'])), outputs('Compose_Search'))), or(not(equals(triggerBody()?['TestReadyOnly'], true)), and(not(empty(item()?['rmm'])), not(empty(item()?['psa'])), not(empty(item()?['mitp'])))))"
+                  }
                 }
               },
+              "expression": "@less(variables('PageCount'), 1000)",
               "runAfter": {
                 "Reset_Page": [
                   "Succeeded"
