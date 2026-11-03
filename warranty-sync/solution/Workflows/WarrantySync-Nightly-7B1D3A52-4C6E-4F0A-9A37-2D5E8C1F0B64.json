@@ -310,8 +310,7 @@
                       "org": "@item()?['attributes']?['organization-name']",
                       "name": "@item()?['attributes']?['name']",
                       "serial": "@item()?['attributes']?['serial-number']",
-                      "rmm": "@string(coalesce(item()?['attributes']?['rmm-id'], ''))",
-                      "psa": "@string(coalesce(item()?['attributes']?['psa-id'], ''))",
+                      "asset": "@string(coalesce(item()?['attributes']?['asset-tag'], ''))",
                       "glue": "@take(string(coalesce(item()?['attributes']?['warranty-expires-at'], '')), 10)",
                       "mitp": "@take(string(coalesce(item()?['attributes']?[parameters('myITProcess attribute name (new_MyITPAttribute)')], '')), 10)"
                     }
@@ -395,8 +394,7 @@
               "org": "@item()?['org']",
               "name": "@item()?['name']",
               "serial": "@item()?['serial']",
-              "rmm": "@item()?['rmm']",
-              "psa": "@item()?['psa']",
+              "asset": "@item()?['asset']",
               "glue": "@item()?['glue']",
               "mitp": "@item()?['mitp']",
               "target": "@if(empty(item()?['mitp']), item()?['glue'], if(or(empty(item()?['glue']), less(item()?['glue'], item()?['mitp'])), item()?['mitp'], item()?['glue']))",
@@ -499,6 +497,107 @@
               },
               "runAfter": {}
             },
+            "Find_CI": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_new-5fwsautotask-5f7e14506b88214820",
+                  "operationId": "QueryConfigurationItems",
+                  "connectionName": "shared_new-5fwsautotask-5f7e14506b88214820"
+                },
+                "parameters": {
+                  "body": {
+                    "MaxRecords": 10,
+                    "IncludeFields": [
+                      "id",
+                      "serialNumber",
+                      "isActive",
+                      "rmmDeviceUID",
+                      "referenceTitle",
+                      "warrantyExpirationDate"
+                    ],
+                    "Filter": [
+                      {
+                        "op": "eq",
+                        "field": "serialNumber",
+                        "value": "@{if(empty(trim(string(coalesce(items('Foreach_Batch')?['serial'], '')))), '-no-serial-', trim(string(coalesce(items('Foreach_Batch')?['serial'], ''))))}"
+                      }
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Get_State_row": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              }
+            },
+            "Filter_CI_active": {
+              "type": "Query",
+              "inputs": {
+                "from": "@coalesce(body('Find_CI')?['items'], createArray())",
+                "where": "@equals(item()?['isActive'], true)"
+              },
+              "runAfter": {
+                "Find_CI": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              }
+            },
+            "Compose_CICount": {
+              "type": "Compose",
+              "inputs": "@length(body('Filter_CI_active'))",
+              "runAfter": {
+                "Filter_CI_active": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              }
+            },
+            "Compose_CI": {
+              "type": "Compose",
+              "inputs": "@if(equals(outputs('Compose_CICount'), 1), first(body('Filter_CI_active')), json('{}'))",
+              "runAfter": {
+                "Compose_CICount": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              }
+            },
+            "Compose_Psa": {
+              "type": "Compose",
+              "inputs": "@string(coalesce(outputs('Compose_CI')?['id'], ''))",
+              "runAfter": {
+                "Compose_CI": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              }
+            },
+            "Compose_Rmm": {
+              "type": "Compose",
+              "inputs": "@if(not(empty(string(coalesce(outputs('Compose_CI')?['rmmDeviceUID'], '')))), string(outputs('Compose_CI')?['rmmDeviceUID']), if(and(equals(length(trim(string(coalesce(items('Foreach_Batch')?['asset'], '')))), 36), equals(length(split(trim(string(coalesce(items('Foreach_Batch')?['asset'], ''))), '-')), 5)), trim(string(coalesce(items('Foreach_Batch')?['asset'], ''))), ''))",
+              "runAfter": {
+                "Compose_Psa": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              }
+            },
             "Scope_ITGlue": {
               "type": "Scope",
               "actions": {
@@ -541,7 +640,7 @@
                 }
               },
               "runAfter": {
-                "Get_State_row": [
+                "Compose_Rmm": [
                   "Succeeded",
                   "Failed",
                   "Skipped",
@@ -556,7 +655,7 @@
                   "type": "If",
                   "expression": {
                     "equals": [
-                      "@and(contains(createArray('false', 'no'), toLower(string(parameters('Dry run (new_DryRun)')))), not(empty(items('Foreach_Batch')?['rmm'])))",
+                      "@and(contains(createArray('false', 'no'), toLower(string(parameters('Dry run (new_DryRun)')))), not(empty(outputs('Compose_Rmm'))))",
                       true
                     ]
                   },
@@ -570,7 +669,7 @@
                           "connectionName": "shared_new-5fwsdattormm-5f7e14506b88214820"
                         },
                         "parameters": {
-                          "deviceUid": "@{items('Foreach_Batch')?['rmm']}",
+                          "deviceUid": "@{outputs('Compose_Rmm')}",
                           "Authorization": "Bearer @{body('Get_Datto_token')?['access_token']}",
                           "body/warrantyDate": "@items('Foreach_Batch')?['target']"
                         }
@@ -607,7 +706,7 @@
                   "type": "If",
                   "expression": {
                     "equals": [
-                      "@and(contains(createArray('false', 'no'), toLower(string(parameters('Dry run (new_DryRun)')))), contains(createArray('true', 'yes'), toLower(string(parameters('Write Autotask (new_WriteAutotask)')))), not(empty(items('Foreach_Batch')?['psa'])))",
+                      "@and(contains(createArray('false', 'no'), toLower(string(parameters('Dry run (new_DryRun)')))), contains(createArray('true', 'yes'), toLower(string(parameters('Write Autotask (new_WriteAutotask)')))), not(empty(outputs('Compose_Psa'))))",
                       true
                     ]
                   },
@@ -621,7 +720,7 @@
                           "connectionName": "shared_new-5fwsautotask-5f7e14506b88214820"
                         },
                         "parameters": {
-                          "body/id": "@int(items('Foreach_Batch')?['psa'])",
+                          "body/id": "@int(outputs('Compose_Psa'))",
                           "body/warrantyExpirationDate": "@{items('Foreach_Batch')?['target']}T00:00:00Z"
                         }
                       },
@@ -657,7 +756,7 @@
             },
             "Compose_Missing": {
               "type": "Compose",
-              "inputs": "@or(empty(items('Foreach_Batch')?['rmm']), and(contains(createArray('true', 'yes'), toLower(string(parameters('Write Autotask (new_WriteAutotask)')))), empty(items('Foreach_Batch')?['psa'])))",
+              "inputs": "@or(empty(outputs('Compose_Rmm')), and(contains(createArray('true', 'yes'), toLower(string(parameters('Write Autotask (new_WriteAutotask)')))), empty(outputs('Compose_Psa'))))",
               "runAfter": {
                 "Compose_HadError": [
                   "Succeeded",
@@ -693,7 +792,7 @@
             },
             "Compose_Note": {
               "type": "Compose",
-              "inputs": "@concat(if(equals(actions('Scope_ITGlue')?['status'], 'Failed'), 'IT Glue write failed. ', ''), if(equals(actions('Scope_Datto')?['status'], 'Failed'), 'Datto RMM write failed. ', ''), if(equals(actions('Scope_Autotask')?['status'], 'Failed'), 'Autotask write failed. ', ''), if(empty(items('Foreach_Batch')?['rmm']), 'rmm-id missing. ', ''), if(and(contains(createArray('true', 'yes'), toLower(string(parameters('Write Autotask (new_WriteAutotask)')))), empty(items('Foreach_Batch')?['psa'])), 'psa-id missing. ', ''), if(or(equals(actions('Scope_ITGlue')?['status'], 'Failed'), equals(actions('Scope_Datto')?['status'], 'Failed'), equals(actions('Scope_Autotask')?['status'], 'Failed')), 'See flow run history.', ''))",
+              "inputs": "@concat(if(equals(actions('Scope_ITGlue')?['status'], 'Failed'), 'IT Glue write failed. ', ''), if(equals(actions('Scope_Datto')?['status'], 'Failed'), 'Datto RMM write failed. ', ''), if(equals(actions('Scope_Autotask')?['status'], 'Failed'), 'Autotask write failed. ', ''), if(empty(outputs('Compose_Rmm')), 'No Datto device UID (Autotask item has no rmmDeviceUID and the asset tag is not a UID). ', ''), if(and(contains(createArray('true', 'yes'), toLower(string(parameters('Write Autotask (new_WriteAutotask)')))), empty(outputs('Compose_Psa'))), if(greater(outputs('Compose_CICount'), 1), 'Several active Autotask items share this serial. ', 'No active Autotask item with this serial. '), ''), if(or(equals(actions('Scope_ITGlue')?['status'], 'Failed'), equals(actions('Scope_Datto')?['status'], 'Failed'), equals(actions('Scope_Autotask')?['status'], 'Failed')), 'See flow run history.', ''))",
               "runAfter": {
                 "Compose_Pushed": [
                   "Succeeded",

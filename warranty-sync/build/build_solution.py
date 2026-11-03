@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the importable Power Automate solution (WarrantySync_1_0_0_16.zip).
+"""Generate the importable Power Automate solution (WarrantySync_1_0_0_17.zip).
 
 Run:  python3 warranty-sync/build/build_solution.py
 Writes the unpacked source to warranty-sync/solution/ and the zip to warranty-sync/.
@@ -10,7 +10,7 @@ from xml.sax.saxutils import escape, quoteattr
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.dirname(HERE)
 SRC = os.path.join(OUT, "solution")
-ZIP = os.path.join(OUT, "WarrantySync_1_0_0_16.zip")
+ZIP = os.path.join(OUT, "WarrantySync_1_0_0_17.zip")
 
 PREFIX = "new"  # matches the environment default publisher (see PUBLISHER below)
 WF_ID = "7b1d3a52-4c6e-4f0a-9a37-2d5e8c1f0b64"
@@ -141,7 +141,11 @@ CONNECTORS = {
   "desc": "Autotask REST API: update configuration item warranty date.", "color": "#e5622b",
   "swagger": swagger("AutotaskWarrantySync", "Autotask REST API for the warranty sync", "webservices4.autotask.net", "/atservicesrest/V1.0", {
      "/ConfigurationItems/{id}": {"get": {"responses": ANY, "summary": "Get configuration item", "operationId": "GetConfigurationItem",
-        "parameters": [{"name": "id", "in": "path", "required": True, "type": "string", "description": "Autotask configuration item ID (IT Glue psa-id)"}]}},
+        "parameters": [{"name": "id", "in": "path", "required": True, "type": "string", "description": "Autotask configuration item ID"}]}},
+     "/ConfigurationItems/query": {"post": {"responses": ANY, "summary": "Query configuration items", "operationId": "QueryConfigurationItems",
+        "description": "Autotask query model: MaxRecords, IncludeFields, Filter [{op, field, value}].",
+        "parameters": [{"name": "body", "in": "body", "required": True, "schema": {"type": "object",
+             "description": "e.g. Filter = [{op: eq, field: serialNumber, value: <serial>}]"}}]}},
      "/ConfigurationItems": {"patch": {"responses": ANY, "summary": "Update configuration item", "operationId": "UpdateConfigurationItem",
         "parameters": [{"name": "body", "in": "body", "required": True, "schema": {"type": "object", "properties": {
              "id": {"type": "integer", "format": "int64"}, "warrantyExpirationDate": {"type": "string", "description": "yyyy-MM-ddT00:00:00Z (midnight UTC)"}}}}]}}},
@@ -149,9 +153,9 @@ CONNECTORS = {
   "params": dict(**conn_param("api_key", "Autotask API secret", "Secret of the Autotask API user", True, 2),
                  **conn_param("username", "Autotask API username", "Username of the Autotask API user", False, 3),
                  **conn_param("integrationCode", "Autotask integration code", "Tracking identifier of the API user", True, 4)),
-  "policies": [setheader("Set username", "UserName", "@connectionParameters('username')", ["GetConfigurationItem", "UpdateConfigurationItem"]),
-               setheader("Set integration code", "ApiIntegrationcode", "@connectionParameters('integrationCode')", ["GetConfigurationItem", "UpdateConfigurationItem"]),
-               setheader("Set content type", "Content-Type", "application/json", ["UpdateConfigurationItem"])],
+  "policies": [setheader("Set username", "UserName", "@connectionParameters('username')", ["GetConfigurationItem", "QueryConfigurationItems", "UpdateConfigurationItem"]),
+               setheader("Set integration code", "ApiIntegrationcode", "@connectionParameters('integrationCode')", ["GetConfigurationItem", "QueryConfigurationItems", "UpdateConfigurationItem"]),
+               setheader("Set content type", "Content-Type", "application/json", ["QueryConfigurationItems", "UpdateConfigurationItem"])],
  },
 }
 for c in CONNECTORS.values():
@@ -207,8 +211,7 @@ until_actions = chain({
             "org": "@" + attr("organization-name"),
             "name": "@" + attr("name"),
             "serial": "@" + attr("serial-number"),
-            "rmm": "@string(coalesce(%s, ''))" % attr("rmm-id"),
-            "psa": "@string(coalesce(%s, ''))" % attr("psa-id"),
+            "asset": "@string(coalesce(%s, ''))" % attr("asset-tag"),
             "glue": "@take(string(coalesce(%s, '')), 10)" % attr("warranty-expires-at"),
             "mitp": "@take(string(coalesce(item()?['attributes']?[%s], '')), 10)" % P("MyITPAttribute"),
         }}},
@@ -253,10 +256,40 @@ def scan_actions(page_filter=None, stop=None):
     return acts
 
 decided = {"id": "@item()?['id']", "org": "@item()?['org']", "name": "@item()?['name']", "serial": "@item()?['serial']",
-           "rmm": "@item()?['rmm']", "psa": "@item()?['psa']", "glue": "@item()?['glue']", "mitp": "@item()?['mitp']",
+           "asset": "@item()?['asset']", "glue": "@item()?['glue']", "mitp": "@item()?['mitp']",
            "target": ("@if(empty(item()?['mitp']), item()?['glue'], if(or(empty(item()?['glue']), "
                       "less(item()?['glue'], item()?['mitp'])), item()?['mitp'], item()?['glue']))"),
            "later": "@and(not(empty(item()?['mitp'])), greater(item()?['glue'], item()?['mitp']))"}
+
+# ---- device links: IT Glue has no psa-id / rmm-id, so devices are matched by serial number ----------
+# Autotask: the ONE active configuration item with this serial -> its id (and warranty date).
+# Datto RMM: that item's rmmDeviceUID (filled by the Datto RMM <-> Autotask integration); if blank, IT Glue's
+# asset tag when it looks like a Datto device UID (the Datto RMM -> IT Glue sync writes it there).
+def resolve_actions(X):
+    serial = "trim(string(coalesce(%s?['serial'], '')))" % X
+    asset = "trim(string(coalesce(%s?['asset'], '')))" % X
+    is_uid = "and(equals(length(%s), 36), equals(length(split(%s, '-')), 5))" % (asset, asset)
+    return chain({
+        "Find_CI": cc("autotask", "QueryConfigurationItems", {"body": {
+            "MaxRecords": 10,
+            "IncludeFields": ["id", "serialNumber", "isActive", "rmmDeviceUID", "referenceTitle", "warrantyExpirationDate"],
+            # a device with no serial must not match items with a blank serial
+            "Filter": [{"op": "eq", "field": "serialNumber", "value": "@{if(empty(%s), '-no-serial-', %s)}" % (serial, serial)}]}},
+            secure=None),
+        "Filter_CI_active": {"type": "Query", "inputs": {"from": "@coalesce(body('Find_CI')?['items'], createArray())",
+                             "where": "@equals(item()?['isActive'], true)"}},
+        "Compose_CICount": {"type": "Compose", "inputs": "@length(body('Filter_CI_active'))"},
+        "Compose_CI": {"type": "Compose", "inputs": "@if(equals(outputs('Compose_CICount'), 1), first(body('Filter_CI_active')), json('{}'))"},
+        "Compose_Psa": {"type": "Compose", "inputs": "@string(coalesce(outputs('Compose_CI')?['id'], ''))"},
+        "Compose_Rmm": {"type": "Compose", "inputs": (
+            "@if(not(empty(string(coalesce(outputs('Compose_CI')?['rmmDeviceUID'], '')))), string(outputs('Compose_CI')?['rmmDeviceUID']), "
+            "if(%s, %s, ''))") % (is_uid, asset)},
+    }, ["Find_CI", "Filter_CI_active", "Compose_CICount", "Compose_CI", "Compose_Psa", "Compose_Rmm"])
+
+PSA, RMM, CICOUNT = "outputs('Compose_Psa')", "outputs('Compose_Rmm')", "outputs('Compose_CICount')"
+psa_reason = ("if(greater(%s, 1), 'Several active Autotask items share this serial. ', "
+              "'No active Autotask item with this serial. ')") % CICOUNT
+rmm_reason = "'No Datto device UID (Autotask item has no rmmDeviceUID and the asset tag is not a UID). '"
 
 # per-device actions
 sc_glue = {"type": "Scope", "actions": {"If_glue_changed": cond(
@@ -264,17 +297,17 @@ sc_glue = {"type": "Scope", "actions": {"If_glue_changed": cond(
     {"ITGlue_write": cc("itglue", "UpdateConfiguration", {"id": "@{%s?['id']}" % IT,
         "body": {"data": {"type": "configurations", "attributes": {"warranty-expires-at": "@%s?['target']" % IT}}}}, secure=None)})}}
 sc_datto = {"type": "Scope", "actions": {"If_rmm_present": cond(
-    "and(%s, not(empty(%s?['rmm'])))" % (live, IT),
-    {"Datto_write": cc("datto", "SetDeviceWarranty", {"deviceUid": "@{%s?['rmm']}" % IT,
+    "and(%s, not(empty(%s)))" % (live, RMM),
+    {"Datto_write": cc("datto", "SetDeviceWarranty", {"deviceUid": "@{%s}" % RMM,
         "Authorization": "Bearer @{body('Get_Datto_token')?['access_token']}", "body/warrantyDate": "@%s?['target']" % IT}, secure=("inputs",))})}}
 sc_at = {"type": "Scope", "actions": {"If_psa_present": cond(
-    "and(%s, %s, not(empty(%s?['psa'])))" % (live, at_on, IT),
-    {"Autotask_write": cc("autotask", "UpdateConfigurationItem", {"body/id": "@int(%s?['psa'])" % IT,
+    "and(%s, %s, not(empty(%s)))" % (live, at_on, PSA),
+    {"Autotask_write": cc("autotask", "UpdateConfigurationItem", {"body/id": "@int(%s)" % PSA,
         "body/warrantyExpirationDate": "@{%s?['target']}T00:00:00Z" % IT}, secure=None)})}}
 
 def failed(scope): return "equals(actions('%s')?['status'], 'Failed')" % scope
 had_err = "or(%s, %s, %s)" % (failed("Scope_ITGlue"), failed("Scope_Datto"), failed("Scope_Autotask"))
-missing = "or(empty(%s?['rmm']), and(%s, empty(%s?['psa'])))" % (IT, at_on, IT)
+missing = "or(empty(%s), and(%s, empty(%s)))" % (RMM, at_on, PSA)
 dry = "not(%s)" % live
 existing_row = "body('Get_State_row')?['value']"
 existing_pushed = "if(greater(length(%s), 0), coalesce(first(%s)?['PushedDate'], ''), '')" % (existing_row, existing_row)
@@ -290,6 +323,7 @@ row = {"dataset": "@" + site, "table": "@" + lst,
 batch_actions = chain({
     "Get_State_row": sp("GetItems", {"dataset": "@" + site, "table": "@" + lst,
         "$filter": "Title eq '@{%s?['id']}'" % IT, "$top": 1}),
+    **resolve_actions(IT),
     "Scope_ITGlue": sc_glue, "Scope_Datto": sc_datto, "Scope_Autotask": sc_at,
     "Compose_HadError": {"type": "Compose", "inputs": "@" + had_err},
     "Compose_Missing": {"type": "Compose", "inputs": "@" + missing},
@@ -299,14 +333,15 @@ batch_actions = chain({
     "Compose_Pushed": {"type": "Compose", "inputs": "@if(and(%s, not(outputs('Compose_HadError')), not(outputs('Compose_Missing'))), %s?['target'], %s)" % (live, IT, existing_pushed)},
     "Compose_Note": {"type": "Compose", "inputs": (
         "@concat(if(%s, 'IT Glue write failed. ', ''), if(%s, 'Datto RMM write failed. ', ''), "
-        "if(%s, 'Autotask write failed. ', ''), if(empty(%s?['rmm']), 'rmm-id missing. ', ''), "
-        "if(and(%s, empty(%s?['psa'])), 'psa-id missing. ', ''), if(or(%s, %s, %s), 'See flow run history.', ''))") % (
-        failed("Scope_ITGlue"), failed("Scope_Datto"), failed("Scope_Autotask"), IT, at_on, IT,
+        "if(%s, 'Autotask write failed. ', ''), if(empty(%s), %s, ''), "
+        "if(and(%s, empty(%s)), %s, ''), if(or(%s, %s, %s), 'See flow run history.', ''))") % (
+        failed("Scope_ITGlue"), failed("Scope_Datto"), failed("Scope_Autotask"), RMM, rmm_reason, at_on, PSA, psa_reason,
         failed("Scope_ITGlue"), failed("Scope_Datto"), failed("Scope_Autotask"))},
     "If_row_exists": {"type": "If", "expression": {"equals": ["@greater(length(%s), 0)" % existing_row, True]},
         "actions": {"Update_row": sp("PatchItem", dict(row, id="@first(%s)?['ID']" % existing_row))},
         "else": {"actions": {"Create_row": sp("PostItem", row)}}, "runAfter": {}},
-}, ["Get_State_row", "Scope_ITGlue", "Scope_Datto", "Scope_Autotask", "Compose_HadError", "Compose_Missing",
+}, ["Get_State_row", "Find_CI", "Filter_CI_active", "Compose_CICount", "Compose_CI", "Compose_Psa", "Compose_Rmm",
+    "Scope_ITGlue", "Scope_Datto", "Scope_Autotask", "Compose_HadError", "Compose_Missing",
     "Compose_Status", "Compose_Pushed", "Compose_Note", "If_row_exists"])
 
 state_str = "@concat(',', join(body('Select_State'), ','), ',')"
@@ -401,44 +436,57 @@ one_live = "or(%s, equals(triggerBody()?['WriteNow'], true))" % live
 def ref(c): return {"runtimeSource": "embedded", "connection": {"connectionReferenceLogicalName": c["connref"]},
                     "api": {"name": c["api"], "logicalName": c["name"]}}
 
-def single_system_flow(label, idfield, idlabel, conn, get_action, current_expr, write_action, pre_actions):
-    """label e.g. 'Autotask'; idfield 'psa'/'rmm'; get_action/write_action are connector actions using ONE."""
-    match = ("or(empty({d}), equals(toLower(string(item()?['id'])), {d}), equals(toLower(string(item()?['{f}'])), {d}), "
+def single_system_flow(label, id_compose, idlabel, conn, get_action, current_expr, write_action, pre_actions, no_id_reason):
+    """label e.g. 'Autotask'; id_compose: the Compose holding this system's ID ('Compose_Psa' / 'Compose_Rmm');
+    get_action: optional read of the device (None when the Autotask query already has the date)."""
+    sys_id = "outputs('%s')" % id_compose
+    match = ("or(empty({d}), equals(toLower(string(item()?['id'])), {d}), "
              "equals(toLower(trim(string(coalesce(item()?['serial'], '')))), {d}), "
-             "equals(toLower(trim(string(coalesce(item()?['name'], '')))), {d}))").format(d=one_dev, f=idfield)
+             "equals(toLower(trim(string(coalesce(item()?['asset'], '')))), {d}), "
+             "equals(toLower(trim(string(coalesce(item()?['name'], '')))), {d}))").format(d=one_dev)
+    has_serial = "not(empty(trim(string(coalesce(item()?['serial'], '')))))"
 
     def result_row(current, result):
-        return {"org": "@%s?['org']" % ONE, "device": "@%s?['name']" % ONE, idlabel: "@%s?['%s']" % (ONE, idfield),
-                label.replace(" ", ""): current, "target": "@%s?['target']" % ONE, "result": result}
+        return {"org": "@%s?['org']" % ONE, "device": "@%s?['name']" % ONE, "serial": "@%s?['serial']" % ONE,
+                idlabel: "@" + sys_id, label.replace(" ", ""): current, "target": "@%s?['target']" % ONE, "result": result}
 
-    device_actions = {
-        "Get_Current": dict(get_action, runAfter={}),
-        "Compose_Current": {"type": "Compose", "runAfter": {"Get_Current": ["Succeeded"]}, "inputs": "@" + current_expr},
-        "If_differs": {"type": "If", "runAfter": {"Compose_Current": ["Succeeded"]},
-            "expression": {"equals": ["@not(equals(%s, %s?['target']))" % (one_current, ONE), True]},
-            "actions": {
-                "Scope_Write": {"type": "Scope", "runAfter": {}, "actions": {"If_live_write": cond(one_live, {
-                    "Write_warranty": dict(write_action, runAfter={})})}},
-                "Record_change": {"type": "AppendToArrayVariable", "runAfter": {"Scope_Write": ALL},
-                    "inputs": {"name": "Results", "value": result_row("@" + one_current,
-                        "@if(%s, 'Error', if(%s, 'Updated', 'Would update'))" % (failed("Scope_Write"), one_live))}}},
-            # a targeted device is always reported, including when it is already correct
-            "else": {"actions": {"If_targeted": cond("not(empty(%s))" % one_dev, {
-                "Record_unchanged": {"type": "AppendToArrayVariable", "runAfter": {},
-                    "inputs": {"name": "Results", "value": result_row("@" + one_current, "Already correct")}}})}}},
-        "Record_lookup_error": {"type": "AppendToArrayVariable", "runAfter": {"Get_Current": ["Failed", "TimedOut"]},
-            "inputs": {"name": "Results", "value": result_row("", "%s lookup failed" % label)}},
-    }
+    found = {}
+    if get_action:
+        found["Get_Current"] = dict(get_action, runAfter={})
+    found["Compose_Current"] = {"type": "Compose", "runAfter": {"Get_Current": ["Succeeded"]} if get_action else {},
+                                "inputs": "@" + current_expr}
+    found["If_differs"] = {"type": "If", "runAfter": {"Compose_Current": ["Succeeded"]},
+        "expression": {"equals": ["@not(equals(%s, %s?['target']))" % (one_current, ONE), True]},
+        "actions": {
+            "Scope_Write": {"type": "Scope", "runAfter": {}, "actions": {"If_live_write": cond(one_live, {
+                "Write_warranty": dict(write_action, runAfter={})})}},
+            "Record_change": {"type": "AppendToArrayVariable", "runAfter": {"Scope_Write": ALL},
+                "inputs": {"name": "Results", "value": result_row("@" + one_current,
+                    "@if(%s, 'Error', if(%s, 'Updated', 'Would update'))" % (failed("Scope_Write"), one_live))}}},
+        # a targeted device is always reported, including when it is already correct
+        "else": {"actions": {"If_targeted": cond("not(empty(%s))" % one_dev, {
+            "Record_unchanged": {"type": "AppendToArrayVariable", "runAfter": {},
+                "inputs": {"name": "Results", "value": result_row("@" + one_current, "Already correct")}}})}}}
+    if get_action:
+        found["Record_lookup_error"] = {"type": "AppendToArrayVariable", "runAfter": {"Get_Current": ["Failed", "TimedOut"]},
+            "inputs": {"name": "Results", "value": result_row("", "%s lookup failed" % label)}}
+
+    device_actions = dict(resolve_actions(ONE))
+    device_actions["If_has_id"] = {"type": "If", "runAfter": {"Compose_Rmm": ["Succeeded"]},
+        "expression": {"equals": ["@not(empty(%s))" % sys_id, True]},
+        "actions": found,
+        "else": {"actions": {"Record_no_match": {"type": "AppendToArrayVariable", "runAfter": {},
+            "inputs": {"name": "Results", "value": result_row("", "@trim(%s)" % no_id_reason)}}}}}
 
     summary = ("<p>Warranty Sync - {L} Only finished (@{{if({live}, 'LIVE', 'DRY RUN')}}).</p><ul>"
         "<li>Target: @{{if(empty(outputs('Compose_Device')), 'all devices', concat('<b>', outputs('Compose_Device'), '</b>'))}}</li>"
         "<li>Devices read from IT Glue: @{{length(body('Select_Decided'))}}</li>"
         "<li>Matching the target: @{{length(body('Filter_Target'))}}"
         "@{{if(and(not(empty(outputs('Compose_Device'))), equals(length(body('Filter_Target')), 0)), "
-        "' <b>- no active laptop/desktop in IT Glue matches this ID, serial or name</b>', '')}}</li>"
-        "<li>With a {I} and a warranty date: @{{length(body('Filter_System'))}}"
+        "' <b>- no active laptop/desktop in IT Glue matches this ID, serial, asset tag or name</b>', '')}}</li>"
+        "<li>With a serial number and a warranty date: @{{length(body('Filter_System'))}}"
         "@{{if(and(greater(length(body('Filter_Target')), 0), equals(length(body('Filter_System')), 0)), "
-        "' <b>- the matching device has no {I} or no warranty date</b>', '')}}</li>"
+        "' <b>- the matching device has no serial number or no warranty date</b>', '')}}</li>"
         "<li>Checked this run: @{{length(outputs('Compose_Batch'))}}</li>"
         "<li>@{{if({live}, 'Updated', 'Would update')}}: @{{length(body('Filter_Changed'))}}</li>"
         "<li>Errors: @{{length(body('Filter_Failed'))}}</li></ul>"
@@ -467,13 +515,13 @@ def single_system_flow(label, idfield, idlabel, conn, get_action, current_expr, 
                           "inputs": {"name": "Devices", "value": "@body('Select_Found')"}}}),
         # otherwise (or if the ID lookup found nothing) scan IT Glue, keeping only matching devices per page
         "Foreach_Type": {"type": "Foreach", "foreach": "@outputs('Compose_TypeIds')",
-                         "actions": scan_actions(page_filter="and(%s, not(empty(item()?['%s'])))" % (match, idfield),
+                         "actions": scan_actions(page_filter="and(%s, %s)" % (match, has_serial),
                                                  stop="and(not(empty(%s)), greater(length(variables('Devices')), 0))" % one_dev),
                          "runtimeConfiguration": {"concurrency": {"repetitions": 1}}},
         "Select_Decided": {"type": "Select", "inputs": {"from": "@variables('Devices')", "select": decided}},
         "Filter_Target": {"type": "Query", "inputs": {"from": "@body('Select_Decided')", "where": "@" + match}},
         "Filter_System": {"type": "Query", "inputs": {"from": "@body('Filter_Target')",
-                          "where": "@and(not(empty(item()?['target'])), not(empty(item()?['%s'])))" % idfield}},
+                          "where": "@and(not(empty(item()?['target'])), %s)" % has_serial}},
         "Compose_Batch": {"type": "Compose", "inputs": "@take(body('Filter_System'), int(%s))" % P("MaxWritesPerRun")},
         # concurrency 1: Results is appended to from inside the loop
         "Foreach_Device": {"type": "Foreach", "foreach": "@outputs('Compose_Batch')", "actions": device_actions,
@@ -509,13 +557,15 @@ def single_system_flow(label, idfield, idlabel, conn, get_action, current_expr, 
             "shared_office365": {"runtimeSource": "embedded", "connection": {"connectionReferenceLogicalName": PREFIX + "_sharedoffice365_wsync"},
                                  "api": {"name": "shared_office365"}},
             CONNECTORS["itglue"]["api"]: ref(CONNECTORS["itglue"]),
+            # Autotask is always needed: devices are found in Autotask by serial number
+            CONNECTORS["autotask"]["api"]: ref(CONNECTORS["autotask"]),
             CONNECTORS[conn]["api"]: ref(CONNECTORS[conn])},
         "definition": {"$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
                        "contentVersion": "1.0.0.0", "parameters": params,
                        "triggers": {"manual": {"type": "Request", "kind": "Button", "inputs": {"schema": {
                            "type": "object", "required": [], "properties": {
                                "Device": {"title": "Device (blank = all)", "type": "string", "x-ms-dynamically-added": True,
-                                          "description": "IT Glue configuration ID, %s ID (%s), serial number or device name. Leave blank for all devices." % (label, idlabel),
+                                          "description": "IT Glue configuration ID, serial number, asset tag or device name. Leave blank for all devices.",
                                           "x-ms-content-hint": "TEXT"},
                                "WriteNow": {"title": "Write now (ignore Dry run)", "type": "boolean", "x-ms-dynamically-added": True,
                                             "description": "Yes = write to %s on this run even while the Dry run variable is Yes." % label,
@@ -525,21 +575,22 @@ def single_system_flow(label, idfield, idlabel, conn, get_action, current_expr, 
 
 AT_WF_ID = "2d6f8b14-7a3c-4e95-b1d8-5c0e9a4f7b23"
 at_flow = single_system_flow(
-    "Autotask", "psa", "psa-id", "autotask",
-    get_action=cc("autotask", "GetConfigurationItem", {"id": "@{%s?['psa']}" % ONE}, secure=None),
-    current_expr="take(string(coalesce(body('Get_Current')?['item']?['warrantyExpirationDate'], '')), 10)",
-    write_action=cc("autotask", "UpdateConfigurationItem", {"body/id": "@int(%s?['psa'])" % ONE,
+    "Autotask", "Compose_Psa", "AutotaskID", "autotask",
+    get_action=None,   # the serial-number query already returns the warranty date
+    current_expr="take(string(coalesce(outputs('Compose_CI')?['warrantyExpirationDate'], '')), 10)",
+    write_action=cc("autotask", "UpdateConfigurationItem", {"body/id": "@int(%s)" % PSA,
         "body/warrantyExpirationDate": "@{%s?['target']}T00:00:00Z" % ONE}, secure=None),
-    pre_actions={})
+    pre_actions={}, no_id_reason=psa_reason)
 
 DT_WF_ID = "9e3a5c71-0b4d-4f28-a6e1-7d2c8b5f4a19"
 dt_flow = single_system_flow(
-    "Datto RMM", "rmm", "rmm-id", "datto",
-    get_action=cc("datto", "GetDevice", {"deviceUid": "@{%s?['rmm']}" % ONE,
+    "Datto RMM", "Compose_Rmm", "DattoUID", "datto",
+    get_action=cc("datto", "GetDevice", {"deviceUid": "@{%s}" % RMM,
         "Authorization": "Bearer @{body('Get_Datto_token')?['access_token']}"}, secure=("inputs",)),
     current_expr="take(string(coalesce(body('Get_Current')?['warrantyDate'], '')), 10)",
-    write_action=cc("datto", "SetDeviceWarranty", {"deviceUid": "@{%s?['rmm']}" % ONE,
+    write_action=cc("datto", "SetDeviceWarranty", {"deviceUid": "@{%s}" % RMM,
         "Authorization": "Bearer @{body('Get_Datto_token')?['access_token']}", "body/warrantyDate": "@%s?['target']" % ONE}, secure=("inputs",)),
+    no_id_reason="concat(if(empty(%s), %s, ''), %s)" % (PSA, psa_reason, rmm_reason),
     # the token is needed to read devices, so it is fetched even in dry run
     pre_actions={
         "Get_Datto_token": cc("datto", "GetToken", {}, secure=("inputs", "outputs"))})
@@ -548,26 +599,27 @@ dt_flow = single_system_flow(
 LS_WF_ID = "5a8c2e47-d13b-4f6a-9c70-3b1e6d8f2a95"
 search = "outputs('Compose_Search')"
 haystack = ("toLower(concat(coalesce(item()?['org'], ''), '|', coalesce(item()?['name'], ''), '|', "
-            "coalesce(item()?['serial'], ''), '|', item()?['id'], '|', item()?['rmm'], '|', item()?['psa']))")
+            "coalesce(item()?['serial'], ''), '|', item()?['id'], '|', item()?['asset']))")
 list_filter = ("and(or(empty({s}), contains({h}, {s})), or(not(equals(triggerBody()?['TestReadyOnly'], true)), "
-               "and(not(empty(item()?['rmm'])), not(empty(item()?['psa'])), not(empty(item()?['mitp'])))))").format(s=search, h=haystack)
+               "and(not(empty(item()?['serial'])), not(empty(item()?['mitp'])))))").format(s=search, h=haystack)
 list_columns = {
     "Organisation": "@item()?['org']", "Device": "@item()?['name']", "Serial": "@item()?['serial']",
-    "ITGlueID": "@item()?['id']", "RmmId": "@item()?['rmm']", "PsaId": "@item()?['psa']",
+    "ITGlueID": "@item()?['id']", "AssetTag": "@item()?['asset']",
     "ITGlueDate": "@item()?['glue']", "MyITPDate": "@item()?['mitp']", "SyncDate": "@item()?['target']",
-    "Notes": ("@concat(if(empty(item()?['rmm']), 'no rmm-id; ', ''), if(empty(item()?['psa']), 'no psa-id; ', ''), "
+    "Notes": ("@concat(if(empty(item()?['serial']), 'no serial number; ', ''), "
               "if(empty(item()?['mitp']), 'no myITProcess date; ', ''), "
               "if(item()?['later'], 'IT Glue later than myITProcess - review; ', ''), "
               "if(and(not(empty(item()?['target'])), not(equals(item()?['target'], item()?['glue']))), 'IT Glue date will change; ', ''), "
-              "if(and(not(empty(item()?['rmm'])), not(empty(item()?['psa'])), not(empty(item()?['mitp']))), 'test-ready', ''))"),
+              "if(and(not(empty(item()?['serial'])), not(empty(item()?['mitp']))), 'test-ready', ''))"),
 }
 list_summary = ("<p>IT Glue active laptops and desktops.</p><ul>"
     "<li>Search: @{if(empty(outputs('Compose_Search')), '(none)', outputs('Compose_Search'))}</li>"
     "<li>Test-ready only: @{if(equals(triggerBody()?['TestReadyOnly'], true), 'Yes', 'No')}</li>"
     "<li>Devices read: @{length(body('Select_Decided'))}</li>"
     "<li>Matching: @{length(body('Filter_List'))}</li></ul>"
-    "<p><b>test-ready</b> = has an rmm-id, a psa-id and a myITProcess date, so every flow can be tested on it. "
-    "Use the ITGlueID, RmmId, PsaId, serial or name as the <b>Device</b> input of the Autotask Only or Datto RMM Only flow.</p>"
+    "<p><b>test-ready</b> = has a serial number and a myITProcess date. Autotask and Datto RMM devices are found by "
+    "serial number, so check the device is also in Autotask with that serial. "
+    "Use the ITGlueID (fastest), serial, asset tag or name as the <b>Device</b> input of the Autotask Only or Datto RMM Only flow.</p>"
     "<p>@{if(greater(length(body('Filter_List')), 300), 'First 300 shown; all matches are in the attached CSV.', 'All matches are also in the attached CSV.')}</p>"
     "@{body('Devices_table')}")
 
@@ -614,10 +666,10 @@ ls_flow = {"properties": {
                    "triggers": {"manual": {"type": "Request", "kind": "Button", "inputs": {"schema": {
                        "type": "object", "required": [], "properties": {
                            "Search": {"title": "Search (blank = all)", "type": "string", "x-ms-dynamically-added": True,
-                                      "description": "Text to look for in organisation, device name, serial, IT Glue ID, rmm-id or psa-id.",
+                                      "description": "Text to look for in organisation, device name, serial, IT Glue ID or asset tag.",
                                       "x-ms-content-hint": "TEXT"},
                            "TestReadyOnly": {"title": "Test-ready only", "type": "boolean", "x-ms-dynamically-added": True,
-                                             "description": "Yes = only devices with an rmm-id, a psa-id and a myITProcess date.",
+                                             "description": "Yes = only devices with a serial number and a myITProcess date.",
                                              "x-ms-content-hint": "BOOLEAN"}}}}}},
                    "actions": ls_actions},
     "templateName": None}, "schemaVersion": "1.0.0.0"}
@@ -634,7 +686,7 @@ FLOWS = [
 # environment (AutotaskaBillitySync_1_0_0_13.zip), which is known to import.
 ORGVER = 'OrganizationVersion="9.2.26102.127" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26102.00127"'
 PUBLISHER = ("DefaultPublisherorgda80817a", "Default Publisher for orgda80817a", "Default publisher for this organization")
-VERSION = "1.0.0.16"
+VERSION = "1.0.0.17"
 
 def write(path, text, bom=False):
     full = os.path.join(SRC, path); os.makedirs(os.path.dirname(full), exist_ok=True)

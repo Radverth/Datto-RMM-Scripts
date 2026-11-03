@@ -20,6 +20,16 @@
           "logicalName": "new_5Fwsitglue"
         }
       },
+      "shared_new-5fwsautotask-5f7e14506b88214820": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "new_shared5fwsautotask5f7e14506b88214820_wsync"
+        },
+        "api": {
+          "name": "shared_new-5fwsautotask-5f7e14506b88214820",
+          "logicalName": "new_5Fwsautotask"
+        }
+      },
       "shared_new-5fwsdattormm-5f7e14506b88214820": {
         "runtimeSource": "embedded",
         "connection": {
@@ -106,7 +116,7 @@
                   "title": "Device (blank = all)",
                   "type": "string",
                   "x-ms-dynamically-added": true,
-                  "description": "IT Glue configuration ID, Datto RMM ID (rmm-id), serial number or device name. Leave blank for all devices.",
+                  "description": "IT Glue configuration ID, serial number, asset tag or device name. Leave blank for all devices.",
                   "x-ms-content-hint": "TEXT"
                 },
                 "WriteNow": {
@@ -277,8 +287,7 @@
                   "org": "@item()?['attributes']?['organization-name']",
                   "name": "@item()?['attributes']?['name']",
                   "serial": "@item()?['attributes']?['serial-number']",
-                  "rmm": "@string(coalesce(item()?['attributes']?['rmm-id'], ''))",
-                  "psa": "@string(coalesce(item()?['attributes']?['psa-id'], ''))",
+                  "asset": "@string(coalesce(item()?['attributes']?['asset-tag'], ''))",
                   "glue": "@take(string(coalesce(item()?['attributes']?['warranty-expires-at'], '')), 10)",
                   "mitp": "@take(string(coalesce(item()?['attributes']?[parameters('myITProcess attribute name (new_MyITPAttribute)')], '')), 10)"
                 }
@@ -360,8 +369,7 @@
                           "org": "@item()?['attributes']?['organization-name']",
                           "name": "@item()?['attributes']?['name']",
                           "serial": "@item()?['attributes']?['serial-number']",
-                          "rmm": "@string(coalesce(item()?['attributes']?['rmm-id'], ''))",
-                          "psa": "@string(coalesce(item()?['attributes']?['psa-id'], ''))",
+                          "asset": "@string(coalesce(item()?['attributes']?['asset-tag'], ''))",
                           "glue": "@take(string(coalesce(item()?['attributes']?['warranty-expires-at'], '')), 10)",
                           "mitp": "@take(string(coalesce(item()?['attributes']?[parameters('myITProcess attribute name (new_MyITPAttribute)')], '')), 10)"
                         }
@@ -426,7 +434,7 @@
                       },
                       "inputs": {
                         "from": "@body('Select_Clean')",
-                        "where": "@and(or(empty(outputs('Compose_Device')), equals(toLower(string(item()?['id'])), outputs('Compose_Device')), equals(toLower(string(item()?['rmm'])), outputs('Compose_Device')), equals(toLower(trim(string(coalesce(item()?['serial'], '')))), outputs('Compose_Device')), equals(toLower(trim(string(coalesce(item()?['name'], '')))), outputs('Compose_Device'))), not(empty(item()?['rmm'])))"
+                        "where": "@and(or(empty(outputs('Compose_Device')), equals(toLower(string(item()?['id'])), outputs('Compose_Device')), equals(toLower(trim(string(coalesce(item()?['serial'], '')))), outputs('Compose_Device')), equals(toLower(trim(string(coalesce(item()?['asset'], '')))), outputs('Compose_Device')), equals(toLower(trim(string(coalesce(item()?['name'], '')))), outputs('Compose_Device'))), not(empty(trim(string(coalesce(item()?['serial'], ''))))))"
                       }
                     }
                   },
@@ -467,8 +475,7 @@
               "org": "@item()?['org']",
               "name": "@item()?['name']",
               "serial": "@item()?['serial']",
-              "rmm": "@item()?['rmm']",
-              "psa": "@item()?['psa']",
+              "asset": "@item()?['asset']",
               "glue": "@item()?['glue']",
               "mitp": "@item()?['mitp']",
               "target": "@if(empty(item()?['mitp']), item()?['glue'], if(or(empty(item()?['glue']), less(item()?['glue'], item()?['mitp'])), item()?['mitp'], item()?['glue']))",
@@ -485,7 +492,7 @@
           "type": "Query",
           "inputs": {
             "from": "@body('Select_Decided')",
-            "where": "@or(empty(outputs('Compose_Device')), equals(toLower(string(item()?['id'])), outputs('Compose_Device')), equals(toLower(string(item()?['rmm'])), outputs('Compose_Device')), equals(toLower(trim(string(coalesce(item()?['serial'], '')))), outputs('Compose_Device')), equals(toLower(trim(string(coalesce(item()?['name'], '')))), outputs('Compose_Device')))"
+            "where": "@or(empty(outputs('Compose_Device')), equals(toLower(string(item()?['id'])), outputs('Compose_Device')), equals(toLower(trim(string(coalesce(item()?['serial'], '')))), outputs('Compose_Device')), equals(toLower(trim(string(coalesce(item()?['asset'], '')))), outputs('Compose_Device')), equals(toLower(trim(string(coalesce(item()?['name'], '')))), outputs('Compose_Device')))"
           },
           "runAfter": {
             "Select_Decided": [
@@ -497,7 +504,7 @@
           "type": "Query",
           "inputs": {
             "from": "@body('Filter_Target')",
-            "where": "@and(not(empty(item()?['target'])), not(empty(item()?['rmm'])))"
+            "where": "@and(not(empty(item()?['target'])), not(empty(trim(string(coalesce(item()?['serial'], ''))))))"
           },
           "runAfter": {
             "Filter_Target": [
@@ -518,102 +525,268 @@
           "type": "Foreach",
           "foreach": "@outputs('Compose_Batch')",
           "actions": {
-            "Get_Current": {
+            "Find_CI": {
               "type": "OpenApiConnection",
               "inputs": {
                 "host": {
-                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_new-5fwsdattormm-5f7e14506b88214820",
-                  "operationId": "GetDevice",
-                  "connectionName": "shared_new-5fwsdattormm-5f7e14506b88214820"
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_new-5fwsautotask-5f7e14506b88214820",
+                  "operationId": "QueryConfigurationItems",
+                  "connectionName": "shared_new-5fwsautotask-5f7e14506b88214820"
                 },
                 "parameters": {
-                  "deviceUid": "@{items('Foreach_Device')?['rmm']}",
-                  "Authorization": "Bearer @{body('Get_Datto_token')?['access_token']}"
+                  "body": {
+                    "MaxRecords": 10,
+                    "IncludeFields": [
+                      "id",
+                      "serialNumber",
+                      "isActive",
+                      "rmmDeviceUID",
+                      "referenceTitle",
+                      "warrantyExpirationDate"
+                    ],
+                    "Filter": [
+                      {
+                        "op": "eq",
+                        "field": "serialNumber",
+                        "value": "@{if(empty(trim(string(coalesce(items('Foreach_Device')?['serial'], '')))), '-no-serial-', trim(string(coalesce(items('Foreach_Device')?['serial'], ''))))}"
+                      }
+                    ]
+                  }
                 }
               },
-              "runAfter": {},
-              "runtimeConfiguration": {
-                "secureData": {
-                  "properties": [
-                    "inputs"
-                  ]
-                }
+              "runAfter": {}
+            },
+            "Filter_CI_active": {
+              "type": "Query",
+              "inputs": {
+                "from": "@coalesce(body('Find_CI')?['items'], createArray())",
+                "where": "@equals(item()?['isActive'], true)"
+              },
+              "runAfter": {
+                "Find_CI": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
               }
             },
-            "Compose_Current": {
+            "Compose_CICount": {
               "type": "Compose",
+              "inputs": "@length(body('Filter_CI_active'))",
               "runAfter": {
-                "Get_Current": [
-                  "Succeeded"
+                "Filter_CI_active": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
                 ]
-              },
-              "inputs": "@take(string(coalesce(body('Get_Current')?['warrantyDate'], '')), 10)"
+              }
             },
-            "If_differs": {
+            "Compose_CI": {
+              "type": "Compose",
+              "inputs": "@if(equals(outputs('Compose_CICount'), 1), first(body('Filter_CI_active')), json('{}'))",
+              "runAfter": {
+                "Compose_CICount": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              }
+            },
+            "Compose_Psa": {
+              "type": "Compose",
+              "inputs": "@string(coalesce(outputs('Compose_CI')?['id'], ''))",
+              "runAfter": {
+                "Compose_CI": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              }
+            },
+            "Compose_Rmm": {
+              "type": "Compose",
+              "inputs": "@if(not(empty(string(coalesce(outputs('Compose_CI')?['rmmDeviceUID'], '')))), string(outputs('Compose_CI')?['rmmDeviceUID']), if(and(equals(length(trim(string(coalesce(items('Foreach_Device')?['asset'], '')))), 36), equals(length(split(trim(string(coalesce(items('Foreach_Device')?['asset'], ''))), '-')), 5)), trim(string(coalesce(items('Foreach_Device')?['asset'], ''))), ''))",
+              "runAfter": {
+                "Compose_Psa": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              }
+            },
+            "If_has_id": {
               "type": "If",
               "runAfter": {
-                "Compose_Current": [
+                "Compose_Rmm": [
                   "Succeeded"
                 ]
               },
               "expression": {
                 "equals": [
-                  "@not(equals(outputs('Compose_Current'), items('Foreach_Device')?['target']))",
+                  "@not(empty(outputs('Compose_Rmm')))",
                   true
                 ]
               },
               "actions": {
-                "Scope_Write": {
-                  "type": "Scope",
+                "Get_Current": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_new-5fwsdattormm-5f7e14506b88214820",
+                      "operationId": "GetDevice",
+                      "connectionName": "shared_new-5fwsdattormm-5f7e14506b88214820"
+                    },
+                    "parameters": {
+                      "deviceUid": "@{outputs('Compose_Rmm')}",
+                      "Authorization": "Bearer @{body('Get_Datto_token')?['access_token']}"
+                    }
+                  },
                   "runAfter": {},
-                  "actions": {
-                    "If_live_write": {
-                      "type": "If",
-                      "expression": {
-                        "equals": [
-                          "@or(contains(createArray('false', 'no'), toLower(string(parameters('Dry run (new_DryRun)')))), equals(triggerBody()?['WriteNow'], true))",
-                          true
-                        ]
-                      },
-                      "actions": {
-                        "Write_warranty": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_new-5fwsdattormm-5f7e14506b88214820",
-                              "operationId": "SetDeviceWarranty",
-                              "connectionName": "shared_new-5fwsdattormm-5f7e14506b88214820"
-                            },
-                            "parameters": {
-                              "deviceUid": "@{items('Foreach_Device')?['rmm']}",
-                              "Authorization": "Bearer @{body('Get_Datto_token')?['access_token']}",
-                              "body/warrantyDate": "@items('Foreach_Device')?['target']"
-                            }
-                          },
-                          "runAfter": {},
-                          "runtimeConfiguration": {
-                            "secureData": {
-                              "properties": [
-                                "inputs"
-                              ]
-                            }
-                          }
-                        }
-                      },
-                      "else": {
-                        "actions": {}
-                      },
-                      "runAfter": {}
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs"
+                      ]
                     }
                   }
                 },
-                "Record_change": {
+                "Compose_Current": {
+                  "type": "Compose",
+                  "runAfter": {
+                    "Get_Current": [
+                      "Succeeded"
+                    ]
+                  },
+                  "inputs": "@take(string(coalesce(body('Get_Current')?['warrantyDate'], '')), 10)"
+                },
+                "If_differs": {
+                  "type": "If",
+                  "runAfter": {
+                    "Compose_Current": [
+                      "Succeeded"
+                    ]
+                  },
+                  "expression": {
+                    "equals": [
+                      "@not(equals(outputs('Compose_Current'), items('Foreach_Device')?['target']))",
+                      true
+                    ]
+                  },
+                  "actions": {
+                    "Scope_Write": {
+                      "type": "Scope",
+                      "runAfter": {},
+                      "actions": {
+                        "If_live_write": {
+                          "type": "If",
+                          "expression": {
+                            "equals": [
+                              "@or(contains(createArray('false', 'no'), toLower(string(parameters('Dry run (new_DryRun)')))), equals(triggerBody()?['WriteNow'], true))",
+                              true
+                            ]
+                          },
+                          "actions": {
+                            "Write_warranty": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_new-5fwsdattormm-5f7e14506b88214820",
+                                  "operationId": "SetDeviceWarranty",
+                                  "connectionName": "shared_new-5fwsdattormm-5f7e14506b88214820"
+                                },
+                                "parameters": {
+                                  "deviceUid": "@{outputs('Compose_Rmm')}",
+                                  "Authorization": "Bearer @{body('Get_Datto_token')?['access_token']}",
+                                  "body/warrantyDate": "@items('Foreach_Device')?['target']"
+                                }
+                              },
+                              "runAfter": {},
+                              "runtimeConfiguration": {
+                                "secureData": {
+                                  "properties": [
+                                    "inputs"
+                                  ]
+                                }
+                              }
+                            }
+                          },
+                          "else": {
+                            "actions": {}
+                          },
+                          "runAfter": {}
+                        }
+                      }
+                    },
+                    "Record_change": {
+                      "type": "AppendToArrayVariable",
+                      "runAfter": {
+                        "Scope_Write": [
+                          "Succeeded",
+                          "Failed",
+                          "Skipped",
+                          "TimedOut"
+                        ]
+                      },
+                      "inputs": {
+                        "name": "Results",
+                        "value": {
+                          "org": "@items('Foreach_Device')?['org']",
+                          "device": "@items('Foreach_Device')?['name']",
+                          "serial": "@items('Foreach_Device')?['serial']",
+                          "DattoUID": "@outputs('Compose_Rmm')",
+                          "DattoRMM": "@outputs('Compose_Current')",
+                          "target": "@items('Foreach_Device')?['target']",
+                          "result": "@if(equals(actions('Scope_Write')?['status'], 'Failed'), 'Error', if(or(contains(createArray('false', 'no'), toLower(string(parameters('Dry run (new_DryRun)')))), equals(triggerBody()?['WriteNow'], true)), 'Updated', 'Would update'))"
+                        }
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "If_targeted": {
+                        "type": "If",
+                        "expression": {
+                          "equals": [
+                            "@not(empty(outputs('Compose_Device')))",
+                            true
+                          ]
+                        },
+                        "actions": {
+                          "Record_unchanged": {
+                            "type": "AppendToArrayVariable",
+                            "runAfter": {},
+                            "inputs": {
+                              "name": "Results",
+                              "value": {
+                                "org": "@items('Foreach_Device')?['org']",
+                                "device": "@items('Foreach_Device')?['name']",
+                                "serial": "@items('Foreach_Device')?['serial']",
+                                "DattoUID": "@outputs('Compose_Rmm')",
+                                "DattoRMM": "@outputs('Compose_Current')",
+                                "target": "@items('Foreach_Device')?['target']",
+                                "result": "Already correct"
+                              }
+                            }
+                          }
+                        },
+                        "else": {
+                          "actions": {}
+                        },
+                        "runAfter": {}
+                      }
+                    }
+                  }
+                },
+                "Record_lookup_error": {
                   "type": "AppendToArrayVariable",
                   "runAfter": {
-                    "Scope_Write": [
-                      "Succeeded",
+                    "Get_Current": [
                       "Failed",
-                      "Skipped",
                       "TimedOut"
                     ]
                   },
@@ -622,66 +795,33 @@
                     "value": {
                       "org": "@items('Foreach_Device')?['org']",
                       "device": "@items('Foreach_Device')?['name']",
-                      "rmm-id": "@items('Foreach_Device')?['rmm']",
-                      "DattoRMM": "@outputs('Compose_Current')",
+                      "serial": "@items('Foreach_Device')?['serial']",
+                      "DattoUID": "@outputs('Compose_Rmm')",
+                      "DattoRMM": "",
                       "target": "@items('Foreach_Device')?['target']",
-                      "result": "@if(equals(actions('Scope_Write')?['status'], 'Failed'), 'Error', if(or(contains(createArray('false', 'no'), toLower(string(parameters('Dry run (new_DryRun)')))), equals(triggerBody()?['WriteNow'], true)), 'Updated', 'Would update'))"
+                      "result": "Datto RMM lookup failed"
                     }
                   }
                 }
               },
               "else": {
                 "actions": {
-                  "If_targeted": {
-                    "type": "If",
-                    "expression": {
-                      "equals": [
-                        "@not(empty(outputs('Compose_Device')))",
-                        true
-                      ]
-                    },
-                    "actions": {
-                      "Record_unchanged": {
-                        "type": "AppendToArrayVariable",
-                        "runAfter": {},
-                        "inputs": {
-                          "name": "Results",
-                          "value": {
-                            "org": "@items('Foreach_Device')?['org']",
-                            "device": "@items('Foreach_Device')?['name']",
-                            "rmm-id": "@items('Foreach_Device')?['rmm']",
-                            "DattoRMM": "@outputs('Compose_Current')",
-                            "target": "@items('Foreach_Device')?['target']",
-                            "result": "Already correct"
-                          }
-                        }
+                  "Record_no_match": {
+                    "type": "AppendToArrayVariable",
+                    "runAfter": {},
+                    "inputs": {
+                      "name": "Results",
+                      "value": {
+                        "org": "@items('Foreach_Device')?['org']",
+                        "device": "@items('Foreach_Device')?['name']",
+                        "serial": "@items('Foreach_Device')?['serial']",
+                        "DattoUID": "@outputs('Compose_Rmm')",
+                        "DattoRMM": "",
+                        "target": "@items('Foreach_Device')?['target']",
+                        "result": "@trim(concat(if(empty(outputs('Compose_Psa')), if(greater(outputs('Compose_CICount'), 1), 'Several active Autotask items share this serial. ', 'No active Autotask item with this serial. '), ''), 'No Datto device UID (Autotask item has no rmmDeviceUID and the asset tag is not a UID). '))"
                       }
-                    },
-                    "else": {
-                      "actions": {}
-                    },
-                    "runAfter": {}
+                    }
                   }
-                }
-              }
-            },
-            "Record_lookup_error": {
-              "type": "AppendToArrayVariable",
-              "runAfter": {
-                "Get_Current": [
-                  "Failed",
-                  "TimedOut"
-                ]
-              },
-              "inputs": {
-                "name": "Results",
-                "value": {
-                  "org": "@items('Foreach_Device')?['org']",
-                  "device": "@items('Foreach_Device')?['name']",
-                  "rmm-id": "@items('Foreach_Device')?['rmm']",
-                  "DattoRMM": "",
-                  "target": "@items('Foreach_Device')?['target']",
-                  "result": "Datto RMM lookup failed"
                 }
               }
             }
@@ -753,7 +893,7 @@
             "parameters": {
               "emailMessage/To": "@parameters('Summary email recipient (new_NotifyEmail)')",
               "emailMessage/Subject": "Warranty Sync - Datto RMM Only summary",
-              "emailMessage/Body": "<p>Warranty Sync - Datto RMM Only finished (@{if(or(contains(createArray('false', 'no'), toLower(string(parameters('Dry run (new_DryRun)')))), equals(triggerBody()?['WriteNow'], true)), 'LIVE', 'DRY RUN')}).</p><ul><li>Target: @{if(empty(outputs('Compose_Device')), 'all devices', concat('<b>', outputs('Compose_Device'), '</b>'))}</li><li>Devices read from IT Glue: @{length(body('Select_Decided'))}</li><li>Matching the target: @{length(body('Filter_Target'))}@{if(and(not(empty(outputs('Compose_Device'))), equals(length(body('Filter_Target')), 0)), ' <b>- no active laptop/desktop in IT Glue matches this ID, serial or name</b>', '')}</li><li>With a rmm-id and a warranty date: @{length(body('Filter_System'))}@{if(and(greater(length(body('Filter_Target')), 0), equals(length(body('Filter_System')), 0)), ' <b>- the matching device has no rmm-id or no warranty date</b>', '')}</li><li>Checked this run: @{length(outputs('Compose_Batch'))}</li><li>@{if(or(contains(createArray('false', 'no'), toLower(string(parameters('Dry run (new_DryRun)')))), equals(triggerBody()?['WriteNow'], true)), 'Updated', 'Would update')}: @{length(body('Filter_Changed'))}</li><li>Errors: @{length(body('Filter_Failed'))}</li></ul><p>Devices whose Datto RMM date differs are listed (a targeted device is always listed).</p>@{body('Results_table')}",
+              "emailMessage/Body": "<p>Warranty Sync - Datto RMM Only finished (@{if(or(contains(createArray('false', 'no'), toLower(string(parameters('Dry run (new_DryRun)')))), equals(triggerBody()?['WriteNow'], true)), 'LIVE', 'DRY RUN')}).</p><ul><li>Target: @{if(empty(outputs('Compose_Device')), 'all devices', concat('<b>', outputs('Compose_Device'), '</b>'))}</li><li>Devices read from IT Glue: @{length(body('Select_Decided'))}</li><li>Matching the target: @{length(body('Filter_Target'))}@{if(and(not(empty(outputs('Compose_Device'))), equals(length(body('Filter_Target')), 0)), ' <b>- no active laptop/desktop in IT Glue matches this ID, serial, asset tag or name</b>', '')}</li><li>With a serial number and a warranty date: @{length(body('Filter_System'))}@{if(and(greater(length(body('Filter_Target')), 0), equals(length(body('Filter_System')), 0)), ' <b>- the matching device has no serial number or no warranty date</b>', '')}</li><li>Checked this run: @{length(outputs('Compose_Batch'))}</li><li>@{if(or(contains(createArray('false', 'no'), toLower(string(parameters('Dry run (new_DryRun)')))), equals(triggerBody()?['WriteNow'], true)), 'Updated', 'Would update')}: @{length(body('Filter_Changed'))}</li><li>Errors: @{length(body('Filter_Failed'))}</li></ul><p>Devices whose Datto RMM date differs are listed (a targeted device is always listed).</p>@{body('Results_table')}",
               "emailMessage/Importance": "Normal"
             },
             "authentication": "@parameters('$authentication')"
