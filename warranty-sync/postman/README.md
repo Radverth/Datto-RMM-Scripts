@@ -61,6 +61,17 @@ After each request, check:
 | 4.2 | ⚠ Datto write | `POST {datto_api_url}/api/v2/device/{rmm_id}/warranty` | Whether the warranty write works |
 | 4.3 | ⚠ Autotask write | `PATCH {autotask_base}/ConfigurationItems` | Whether the warranty write works |
 
+### Folder 5: finding the Autotask / Datto links
+
+IT Glue doesn't return `psa-id` / `rmm-id` on your configurations. Run 1.4 on a device that is in both Autotask and
+Datto RMM (it saves `serial_number` and `asset_tag`), then 2.1, then:
+
+| # | Request | URL | Tells you |
+|---|---|---|---|
+| 5.1 | IT Glue with adapters-resources | `GET {itglue_host}/configurations/{configuration_id}?include=adapters_resources` | Whether IT Glue's integration links hold the Autotask / Datto IDs |
+| 5.2 | Datto device by asset tag | `GET {datto_api_url}/api/v2/device/{asset_tag}` | Whether the IT Glue asset tag is the Datto device UID |
+| 5.3 | Autotask item by serial | `POST {autotask_base}/ConfigurationItems/query` (filter `serialNumber eq {serial_number}`) | The Autotask ID for that serial, and the Datto UID Autotask holds (`rmmDeviceUID`) |
+
 ## 3. Copy the results into the solution
 
 Go to Power Apps → **Solutions → Warranty Sync → Environment variables** and enter:

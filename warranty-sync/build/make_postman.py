@@ -110,6 +110,9 @@ pm.visualizer.set(`
 pm.test("200 OK", () => pm.response.to.have.status(200));
 const a = pm.response.json().data.attributes;
 console.log(JSON.stringify(a, null, 2));
+pm.environment.set("serial_number", a["serial-number"] || "");
+pm.environment.set("asset_tag", a["asset-tag"] || "");
+pm.test("Saved serial_number = " + (a["serial-number"] || "(none)") + ", asset_tag = " + (a["asset-tag"] || "(none)"), () => true);
 ''', jsonapi),
 ]}
 
@@ -220,10 +223,46 @@ writes = {"name": "4. Optional write tests (CHANGES DATA)", "description":
       headers=at_headers, body={"mode": "raw", "raw": '{\n  "id": {{psa_id}},\n  "warrantyExpirationDate": "{{test_warranty_date}}T00:00:00Z"\n}'}),
 ]}
 
+links = {"name": "5. Find the Autotask / Datto links", "description":
+  "Your IT Glue configurations have no psa-id / rmm-id fields. These three read-only requests show where the links "
+  "are instead. Run 1.4 first on a device that is in both Autotask and Datto RMM (it saves serial_number and asset_tag), "
+  "and 2.1 for the Datto token.", "item": [
+  req("5.1 IT Glue - configuration with adapters-resources", "GET",
+      "{{itglue_host}}/configurations/{{configuration_id}}?include=adapters_resources",
+      "Shows what IT Glue's integration links (adapters-resources) contain. Look in the Console for any Autotask or Datto IDs.",
+      r"""
+pm.test("200 OK", () => pm.response.to.have.status(200));
+const inc = pm.response.json().included || [];
+pm.test("Included adapters-resources: " + inc.length, () => true);
+inc.forEach(r => console.log(r.type, r.id, JSON.stringify(r.attributes, null, 2)));
+""", jsonapi, auth=itglue_auth),
+  req("5.2 Datto RMM - device by IT Glue asset tag", "GET", "{{datto_api_url}}/api/v2/device/{{asset_tag}}",
+      "200 means IT Glue's asset tag is the Datto device UID, so the flows can use it to find Datto devices.",
+      r"""
+pm.test("Asset tag is a Datto device UID (200)", () => pm.response.to.have.status(200));
+if (pm.response.code === 200) { const d = pm.response.json(); console.log({ hostname: d.hostname, uid: d.uid, warrantyDate: d.warrantyDate }); }
+""", auth=datto_auth),
+  req("5.3 Autotask - configuration item by serial number", "POST", "{{autotask_base}}/ConfigurationItems/query",
+      "Finds the Autotask configuration item with the IT Glue serial number. Shows its ID (what the flows need) and "
+      "rmmDeviceUID (the Datto device UID Autotask holds).",
+      r"""
+pm.test("200 OK", () => pm.response.to.have.status(200));
+const items = pm.response.json().items || [];
+pm.test("Configuration items with this serial: " + items.length + " (should be 1)", () => pm.expect(items.length).to.equal(1));
+const rows = items.map(i => ({ id: i.id, title: i.referenceTitle, serial: i.serialNumber, rmmDeviceUID: i.rmmDeviceUID, active: i.isActive, warranty: i.warrantyExpirationDate }));
+console.table(rows);
+const assetTag = pm.environment.get("asset_tag");
+rows.forEach(r => pm.test("rmmDeviceUID " + (r.rmmDeviceUID || "(blank)") + (r.rmmDeviceUID && assetTag && r.rmmDeviceUID.toLowerCase() === assetTag.toLowerCase() ? " matches the IT Glue asset tag" : " does not match the IT Glue asset tag"), () => true));
+pm.visualizer.set(`<table border=1 cellpadding=4><tr><th>id</th><th>Title</th><th>Serial</th><th>rmmDeviceUID</th><th>Active</th><th>Warranty</th></tr>{{#each rows}}<tr><td>{{id}}</td><td>{{title}}</td><td>{{serial}}</td><td>{{rmmDeviceUID}}</td><td>{{active}}</td><td>{{warranty}}</td></tr>{{/each}}</table>`, { rows });
+""", headers=at_headers, body={"mode": "raw", "raw": json.dumps({"MaxRecords": 5,
+      "IncludeFields": ["id", "referenceTitle", "serialNumber", "rmmDeviceUID", "isActive", "warrantyExpirationDate"],
+      "Filter": [{"op": "eq", "field": "serialNumber", "value": "{{serial_number}}"}]}, indent=2)}),
+]}
+
 collection = {"info": {"name": "Warranty Sync - Setup Lookups", "_postman_id": "6f0f3d8e-2a51-4b7c-9e1d-58c4b2a7d903",
   "description": "Looks up the values the Warranty Sync Power Automate solution needs. See README.md in this folder.",
   "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
-  "item": [itglue, datto, autotask, writes]}
+  "item": [itglue, datto, autotask, writes, links]}
 
 env = {"id": "b8a1c2d3-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "name": "Warranty Sync", "_postman_variable_scope": "environment", "values": [
   {"key": k, "value": v, "type": t, "enabled": True} for k, v, t in [
@@ -236,6 +275,7 @@ env = {"id": "b8a1c2d3-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "name": "Warranty Sync", "_
     ("autotask_secret", "", "secret"),
     ("autotask_integration_code", "", "secret"),
     ("test_warranty_date", "", "default"),
+    ("serial_number", "", "default"), ("asset_tag", "", "default"),
     ("laptop_type_id", "", "default"), ("desktop_type_id", "", "default"), ("active_status_id", "", "default"),
     ("configuration_id", "", "default"), ("rmm_id", "", "default"), ("psa_id", "", "default"),
     ("datto_token", "", "secret"), ("autotask_base", "https://webservices4.autotask.net/atservicesrest/v1.0", "default")]]}

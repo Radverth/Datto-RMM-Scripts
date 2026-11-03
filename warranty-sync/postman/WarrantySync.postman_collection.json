@@ -240,7 +240,10 @@
                 "exec": [
                   "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
                   "const a = pm.response.json().data.attributes;",
-                  "console.log(JSON.stringify(a, null, 2));"
+                  "console.log(JSON.stringify(a, null, 2));",
+                  "pm.environment.set(\"serial_number\", a[\"serial-number\"] || \"\");",
+                  "pm.environment.set(\"asset_tag\", a[\"asset-tag\"] || \"\");",
+                  "pm.test(\"Saved serial_number = \" + (a[\"serial-number\"] || \"(none)\") + \", asset_tag = \" + (a[\"asset-tag\"] || \"(none)\"), () => true);"
                 ]
               }
             }
@@ -790,6 +793,174 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Find the Autotask / Datto links",
+      "description": "Your IT Glue configurations have no psa-id / rmm-id fields. These three read-only requests show where the links are instead. Run 1.4 first on a device that is in both Autotask and Datto RMM (it saves serial_number and asset_tag), and 2.1 for the Datto token.",
+      "item": [
+        {
+          "name": "5.1 IT Glue - configuration with adapters-resources",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/vnd.api+json"
+              }
+            ],
+            "url": {
+              "raw": "{{itglue_host}}/configurations/{{configuration_id}}?include=adapters_resources",
+              "host": [
+                "{{itglue_host}}"
+              ],
+              "path": [
+                "configurations",
+                "{{configuration_id}}"
+              ],
+              "query": [
+                {
+                  "key": "include",
+                  "value": "adapters_resources"
+                }
+              ]
+            },
+            "description": "Shows what IT Glue's integration links (adapters-resources) contain. Look in the Console for any Autotask or Datto IDs.",
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "x-api-key",
+                  "type": "string"
+                },
+                {
+                  "key": "value",
+                  "value": "{{itglue_api_key}}",
+                  "type": "string"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const inc = pm.response.json().included || [];",
+                  "pm.test(\"Included adapters-resources: \" + inc.length, () => true);",
+                  "inc.forEach(r => console.log(r.type, r.id, JSON.stringify(r.attributes, null, 2)));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.2 Datto RMM - device by IT Glue asset tag",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{datto_api_url}}/api/v2/device/{{asset_tag}}",
+              "host": [
+                "{{datto_api_url}}"
+              ],
+              "path": [
+                "api",
+                "v2",
+                "device",
+                "{{asset_tag}}"
+              ]
+            },
+            "description": "200 means IT Glue's asset tag is the Datto device UID, so the flows can use it to find Datto devices.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{datto_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Asset tag is a Datto device UID (200)\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) { const d = pm.response.json(); console.log({ hostname: d.hostname, uid: d.uid, warrantyDate: d.warrantyDate }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.3 Autotask - configuration item by serial number",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "ApiIntegrationcode",
+                "value": "{{autotask_integration_code}}"
+              },
+              {
+                "key": "UserName",
+                "value": "{{autotask_username}}"
+              },
+              {
+                "key": "Secret",
+                "value": "{{autotask_secret}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{autotask_base}}/ConfigurationItems/query",
+              "host": [
+                "{{autotask_base}}"
+              ],
+              "path": [
+                "ConfigurationItems",
+                "query"
+              ]
+            },
+            "description": "Finds the Autotask configuration item with the IT Glue serial number. Shows its ID (what the flows need) and rmmDeviceUID (the Datto device UID Autotask holds).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"MaxRecords\": 5,\n  \"IncludeFields\": [\n    \"id\",\n    \"referenceTitle\",\n    \"serialNumber\",\n    \"rmmDeviceUID\",\n    \"isActive\",\n    \"warrantyExpirationDate\"\n  ],\n  \"Filter\": [\n    {\n      \"op\": \"eq\",\n      \"field\": \"serialNumber\",\n      \"value\": \"{{serial_number}}\"\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json().items || [];",
+                  "pm.test(\"Configuration items with this serial: \" + items.length + \" (should be 1)\", () => pm.expect(items.length).to.equal(1));",
+                  "const rows = items.map(i => ({ id: i.id, title: i.referenceTitle, serial: i.serialNumber, rmmDeviceUID: i.rmmDeviceUID, active: i.isActive, warranty: i.warrantyExpirationDate }));",
+                  "console.table(rows);",
+                  "const assetTag = pm.environment.get(\"asset_tag\");",
+                  "rows.forEach(r => pm.test(\"rmmDeviceUID \" + (r.rmmDeviceUID || \"(blank)\") + (r.rmmDeviceUID && assetTag && r.rmmDeviceUID.toLowerCase() === assetTag.toLowerCase() ? \" matches the IT Glue asset tag\" : \" does not match the IT Glue asset tag\"), () => true));",
+                  "pm.visualizer.set(`<table border=1 cellpadding=4><tr><th>id</th><th>Title</th><th>Serial</th><th>rmmDeviceUID</th><th>Active</th><th>Warranty</th></tr>{{#each rows}}<tr><td>{{id}}</td><td>{{title}}</td><td>{{serial}}</td><td>{{rmmDeviceUID}}</td><td>{{active}}</td><td>{{warranty}}</td></tr>{{/each}}</table>`, { rows });"
                 ]
               }
             }
