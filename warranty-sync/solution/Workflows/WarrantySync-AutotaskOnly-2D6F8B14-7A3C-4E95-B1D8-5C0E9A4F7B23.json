@@ -542,7 +542,7 @@
             "Filter_CI_active": {
               "type": "Query",
               "inputs": {
-                "from": "@coalesce(body('Find_CI')?['items'], createArray())",
+                "from": "@coalesce(body('Find_CI')?['items'], json('[]'))",
                 "where": "@equals(item()?['isActive'], true)"
               },
               "runAfter": {
