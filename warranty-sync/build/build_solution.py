@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the importable Power Automate solution (WarrantySync_1_0_0_17.zip).
+"""Generate the importable Power Automate solution (WarrantySync_1_0_0_18.zip).
 
 Run:  python3 warranty-sync/build/build_solution.py
 Writes the unpacked source to warranty-sync/solution/ and the zip to warranty-sync/.
@@ -10,7 +10,7 @@ from xml.sax.saxutils import escape, quoteattr
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.dirname(HERE)
 SRC = os.path.join(OUT, "solution")
-ZIP = os.path.join(OUT, "WarrantySync_1_0_0_17.zip")
+ZIP = os.path.join(OUT, "WarrantySync_1_0_0_18.zip")
 
 PREFIX = "new"  # matches the environment default publisher (see PUBLISHER below)
 WF_ID = "7b1d3a52-4c6e-4f0a-9a37-2d5e8c1f0b64"
@@ -265,14 +265,18 @@ decided = {"id": "@item()?['id']", "org": "@item()?['org']", "name": "@item()?['
 # Autotask: the ONE active configuration item with this serial -> its id (and warranty date).
 # Datto RMM: that item's rmmDeviceUID (filled by the Datto RMM <-> Autotask integration); if blank, IT Glue's
 # asset tag when it looks like a Datto device UID (the Datto RMM -> IT Glue sync writes it there).
+def uid_shape(e):  # 36 characters in five dash-separated groups, like a Datto device UID
+    return "and(equals(length(%s), 36), equals(length(split(%s, '-')), 5))" % (e, e)
+
 def resolve_actions(X):
     serial = "trim(string(coalesce(%s?['serial'], '')))" % X
     asset = "trim(string(coalesce(%s?['asset'], '')))" % X
-    is_uid = "and(equals(length(%s), 36), equals(length(split(%s, '-')), 5))" % (asset, asset)
+    is_uid = uid_shape(asset)
+    ref_no = "trim(string(coalesce(outputs('Compose_CI')?['referenceNumber'], '')))"
     return chain({
         "Find_CI": cc("autotask", "QueryConfigurationItems", {"body": {
             "MaxRecords": 10,
-            "IncludeFields": ["id", "serialNumber", "isActive", "rmmDeviceUID", "referenceTitle", "warrantyExpirationDate"],
+            "IncludeFields": ["id", "serialNumber", "isActive", "referenceNumber", "rmmDeviceUID", "referenceTitle", "warrantyExpirationDate"],
             # a device with no serial must not match items with a blank serial
             "Filter": [{"op": "eq", "field": "serialNumber", "value": "@{if(empty(%s), '-no-serial-', %s)}" % (serial, serial)}]}},
             secure=None),
@@ -281,15 +285,18 @@ def resolve_actions(X):
         "Compose_CICount": {"type": "Compose", "inputs": "@length(body('Filter_CI_active'))"},
         "Compose_CI": {"type": "Compose", "inputs": "@if(equals(outputs('Compose_CICount'), 1), first(body('Filter_CI_active')), json('{}'))"},
         "Compose_Psa": {"type": "Compose", "inputs": "@string(coalesce(outputs('Compose_CI')?['id'], ''))"},
+        # Datto device UID, first match wins: Autotask reference number (where this tenant keeps it),
+        # Autotask rmmDeviceUID, then IT Glue asset tag. Reference number and asset tag must look like a UID.
         "Compose_Rmm": {"type": "Compose", "inputs": (
-            "@if(not(empty(string(coalesce(outputs('Compose_CI')?['rmmDeviceUID'], '')))), string(outputs('Compose_CI')?['rmmDeviceUID']), "
-            "if(%s, %s, ''))") % (is_uid, asset)},
+            "@if(%s, %s, if(not(empty(string(coalesce(outputs('Compose_CI')?['rmmDeviceUID'], '')))), "
+            "string(outputs('Compose_CI')?['rmmDeviceUID']), if(%s, %s, '')))") % (
+            uid_shape(ref_no), ref_no, is_uid, asset)},
     }, ["Find_CI", "Filter_CI_active", "Compose_CICount", "Compose_CI", "Compose_Psa", "Compose_Rmm"])
 
 PSA, RMM, CICOUNT = "outputs('Compose_Psa')", "outputs('Compose_Rmm')", "outputs('Compose_CICount')"
 psa_reason = ("if(greater(%s, 1), 'Several active Autotask items share this serial. ', "
               "'No active Autotask item with this serial. ')") % CICOUNT
-rmm_reason = "'No Datto device UID (Autotask item has no rmmDeviceUID and the asset tag is not a UID). '"
+rmm_reason = "'No Datto device UID (Autotask reference number and rmmDeviceUID are blank, asset tag is not a UID). '"
 
 # per-device actions
 sc_glue = {"type": "Scope", "actions": {"If_glue_changed": cond(
@@ -686,7 +693,7 @@ FLOWS = [
 # environment (AutotaskaBillitySync_1_0_0_13.zip), which is known to import.
 ORGVER = 'OrganizationVersion="9.2.26102.127" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26102.00127"'
 PUBLISHER = ("DefaultPublisherorgda80817a", "Default Publisher for orgda80817a", "Default publisher for this organization")
-VERSION = "1.0.0.17"
+VERSION = "1.0.0.18"
 
 def write(path, text, bom=False):
     full = os.path.join(SRC, path); os.makedirs(os.path.dirname(full), exist_ok=True)

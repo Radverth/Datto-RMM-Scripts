@@ -244,18 +244,18 @@ if (pm.response.code === 200) { const d = pm.response.json(); console.log({ host
 """, auth=datto_auth),
   req("5.3 Autotask - configuration item by serial number", "POST", "{{autotask_base}}/ConfigurationItems/query",
       "Finds the Autotask configuration item with the IT Glue serial number. Shows its ID (what the flows need) and "
-      "rmmDeviceUID (the Datto device UID Autotask holds).",
+      "the reference number (where this tenant keeps the Datto device UID).",
       r"""
 pm.test("200 OK", () => pm.response.to.have.status(200));
 const items = pm.response.json().items || [];
 pm.test("Configuration items with this serial: " + items.length + " (should be 1)", () => pm.expect(items.length).to.equal(1));
-const rows = items.map(i => ({ id: i.id, title: i.referenceTitle, serial: i.serialNumber, rmmDeviceUID: i.rmmDeviceUID, active: i.isActive, warranty: i.warrantyExpirationDate }));
+const rows = items.map(i => ({ id: i.id, title: i.referenceTitle, serial: i.serialNumber, referenceNumber: i.referenceNumber, rmmDeviceUID: i.rmmDeviceUID, active: i.isActive, warranty: i.warrantyExpirationDate }));
 console.table(rows);
 const assetTag = pm.environment.get("asset_tag");
-rows.forEach(r => pm.test("rmmDeviceUID " + (r.rmmDeviceUID || "(blank)") + (r.rmmDeviceUID && assetTag && r.rmmDeviceUID.toLowerCase() === assetTag.toLowerCase() ? " matches the IT Glue asset tag" : " does not match the IT Glue asset tag"), () => true));
-pm.visualizer.set(`<table border=1 cellpadding=4><tr><th>id</th><th>Title</th><th>Serial</th><th>rmmDeviceUID</th><th>Active</th><th>Warranty</th></tr>{{#each rows}}<tr><td>{{id}}</td><td>{{title}}</td><td>{{serial}}</td><td>{{rmmDeviceUID}}</td><td>{{active}}</td><td>{{warranty}}</td></tr>{{/each}}</table>`, { rows });
+rows.forEach(r => pm.test("Reference number (Datto UID) " + (r.referenceNumber || "(blank)") + (r.referenceNumber && assetTag && String(r.referenceNumber).toLowerCase() === assetTag.toLowerCase() ? " matches the IT Glue asset tag" : " does not match the IT Glue asset tag"), () => true));
+pm.visualizer.set(`<table border=1 cellpadding=4><tr><th>id</th><th>Title</th><th>Serial</th><th>Reference number (Datto UID)</th><th>rmmDeviceUID</th><th>Active</th><th>Warranty</th></tr>{{#each rows}}<tr><td>{{id}}</td><td>{{title}}</td><td>{{serial}}</td><td>{{referenceNumber}}</td><td>{{rmmDeviceUID}}</td><td>{{active}}</td><td>{{warranty}}</td></tr>{{/each}}</table>`, { rows });
 """, headers=at_headers, body={"mode": "raw", "raw": json.dumps({"MaxRecords": 5,
-      "IncludeFields": ["id", "referenceTitle", "serialNumber", "rmmDeviceUID", "isActive", "warrantyExpirationDate"],
+      "IncludeFields": ["id", "referenceTitle", "serialNumber", "referenceNumber", "rmmDeviceUID", "isActive", "warrantyExpirationDate"],
       "Filter": [{"op": "eq", "field": "serialNumber", "value": "{{serial_number}}"}]}, indent=2)}),
 ]}
 

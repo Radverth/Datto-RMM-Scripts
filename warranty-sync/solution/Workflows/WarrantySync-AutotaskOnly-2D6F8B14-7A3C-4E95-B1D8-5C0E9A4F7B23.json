@@ -506,6 +506,7 @@
                       "id",
                       "serialNumber",
                       "isActive",
+                      "referenceNumber",
                       "rmmDeviceUID",
                       "referenceTitle",
                       "warrantyExpirationDate"
@@ -575,7 +576,7 @@
             },
             "Compose_Rmm": {
               "type": "Compose",
-              "inputs": "@if(not(empty(string(coalesce(outputs('Compose_CI')?['rmmDeviceUID'], '')))), string(outputs('Compose_CI')?['rmmDeviceUID']), if(and(equals(length(trim(string(coalesce(items('Foreach_Device')?['asset'], '')))), 36), equals(length(split(trim(string(coalesce(items('Foreach_Device')?['asset'], ''))), '-')), 5)), trim(string(coalesce(items('Foreach_Device')?['asset'], ''))), ''))",
+              "inputs": "@if(and(equals(length(trim(string(coalesce(outputs('Compose_CI')?['referenceNumber'], '')))), 36), equals(length(split(trim(string(coalesce(outputs('Compose_CI')?['referenceNumber'], ''))), '-')), 5)), trim(string(coalesce(outputs('Compose_CI')?['referenceNumber'], ''))), if(not(empty(string(coalesce(outputs('Compose_CI')?['rmmDeviceUID'], '')))), string(outputs('Compose_CI')?['rmmDeviceUID']), if(and(equals(length(trim(string(coalesce(items('Foreach_Device')?['asset'], '')))), 36), equals(length(split(trim(string(coalesce(items('Foreach_Device')?['asset'], ''))), '-')), 5)), trim(string(coalesce(items('Foreach_Device')?['asset'], ''))), '')))",
               "runAfter": {
                 "Compose_Psa": [
                   "Succeeded",

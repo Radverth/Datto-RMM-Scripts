@@ -512,6 +512,7 @@
                       "id",
                       "serialNumber",
                       "isActive",
+                      "referenceNumber",
                       "rmmDeviceUID",
                       "referenceTitle",
                       "warrantyExpirationDate"
@@ -588,7 +589,7 @@
             },
             "Compose_Rmm": {
               "type": "Compose",
-              "inputs": "@if(not(empty(string(coalesce(outputs('Compose_CI')?['rmmDeviceUID'], '')))), string(outputs('Compose_CI')?['rmmDeviceUID']), if(and(equals(length(trim(string(coalesce(items('Foreach_Batch')?['asset'], '')))), 36), equals(length(split(trim(string(coalesce(items('Foreach_Batch')?['asset'], ''))), '-')), 5)), trim(string(coalesce(items('Foreach_Batch')?['asset'], ''))), ''))",
+              "inputs": "@if(and(equals(length(trim(string(coalesce(outputs('Compose_CI')?['referenceNumber'], '')))), 36), equals(length(split(trim(string(coalesce(outputs('Compose_CI')?['referenceNumber'], ''))), '-')), 5)), trim(string(coalesce(outputs('Compose_CI')?['referenceNumber'], ''))), if(not(empty(string(coalesce(outputs('Compose_CI')?['rmmDeviceUID'], '')))), string(outputs('Compose_CI')?['rmmDeviceUID']), if(and(equals(length(trim(string(coalesce(items('Foreach_Batch')?['asset'], '')))), 36), equals(length(split(trim(string(coalesce(items('Foreach_Batch')?['asset'], ''))), '-')), 5)), trim(string(coalesce(items('Foreach_Batch')?['asset'], ''))), '')))",
               "runAfter": {
                 "Compose_Psa": [
                   "Succeeded",
@@ -792,7 +793,7 @@
             },
             "Compose_Note": {
               "type": "Compose",
-              "inputs": "@concat(if(equals(actions('Scope_ITGlue')?['status'], 'Failed'), 'IT Glue write failed. ', ''), if(equals(actions('Scope_Datto')?['status'], 'Failed'), 'Datto RMM write failed. ', ''), if(equals(actions('Scope_Autotask')?['status'], 'Failed'), 'Autotask write failed. ', ''), if(empty(outputs('Compose_Rmm')), 'No Datto device UID (Autotask item has no rmmDeviceUID and the asset tag is not a UID). ', ''), if(and(contains(createArray('true', 'yes'), toLower(string(parameters('Write Autotask (new_WriteAutotask)')))), empty(outputs('Compose_Psa'))), if(greater(outputs('Compose_CICount'), 1), 'Several active Autotask items share this serial. ', 'No active Autotask item with this serial. '), ''), if(or(equals(actions('Scope_ITGlue')?['status'], 'Failed'), equals(actions('Scope_Datto')?['status'], 'Failed'), equals(actions('Scope_Autotask')?['status'], 'Failed')), 'See flow run history.', ''))",
+              "inputs": "@concat(if(equals(actions('Scope_ITGlue')?['status'], 'Failed'), 'IT Glue write failed. ', ''), if(equals(actions('Scope_Datto')?['status'], 'Failed'), 'Datto RMM write failed. ', ''), if(equals(actions('Scope_Autotask')?['status'], 'Failed'), 'Autotask write failed. ', ''), if(empty(outputs('Compose_Rmm')), 'No Datto device UID (Autotask reference number and rmmDeviceUID are blank, asset tag is not a UID). ', ''), if(and(contains(createArray('true', 'yes'), toLower(string(parameters('Write Autotask (new_WriteAutotask)')))), empty(outputs('Compose_Psa'))), if(greater(outputs('Compose_CICount'), 1), 'Several active Autotask items share this serial. ', 'No active Autotask item with this serial. '), ''), if(or(equals(actions('Scope_ITGlue')?['status'], 'Failed'), equals(actions('Scope_Datto')?['status'], 'Failed'), equals(actions('Scope_Autotask')?['status'], 'Failed')), 'See flow run history.', ''))",
               "runAfter": {
                 "Compose_Pushed": [
                   "Succeeded",
